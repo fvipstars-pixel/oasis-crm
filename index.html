@@ -1183,7 +1183,10 @@ function renderKpi(){
     <div class="kpi-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <h2>KPI менеджеров — три источника клиентов</h2>
-        <button class="btn subtle sm" id="btnExportKpi">⬇ Скачать Excel</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn subtle sm" id="btnExportKpi">⬇ Скачать Excel</button>
+          <button class="btn subtle sm" id="btnExportJson">⬇ JSON (резервная копия базы)</button>
+        </div>
       </div>
       <div class="toolbar" style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <label class="lbl" style="margin:0;">Период (по дате регистрации)</label>
@@ -1212,6 +1215,8 @@ function renderKpi(){
 
   const btnExp = document.getElementById("btnExportKpi");
   if (btnExp) btnExp.onclick = downloadKpiExcel;
+  const btnJson = document.getElementById("btnExportJson");
+  if (btnJson) btnJson.onclick = downloadFullJsonBackup;
   document.getElementById("kpiFrom").onchange = (e)=>{ kpiPeriod.from = e.target.value; renderKpi(); };
   document.getElementById("kpiTo").onchange = (e)=>{ kpiPeriod.to = e.target.value; renderKpi(); };
   const kpiClearBtn = document.getElementById("btnKpiPeriodClear");
@@ -1361,6 +1366,13 @@ function saveBlobAsFile(filename, blob){
   a.click();
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+
+function downloadFullJsonBackup(){
+  // Полная выгрузка всех клиентов, которые видны текущему пользователю (у админа — вся база).
+  const arr = Array.from(clients.entries()).map(([id, c])=> Object.assign({ id }, c));
+  const blob = new Blob([JSON.stringify(arr, null, 2)], { type: "application/json" });
+  saveBlobAsFile(`CRM_backup_${todayISO()}.json`, blob);
 }
 
 async function downloadKpiExcel(){
