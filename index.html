@@ -276,6 +276,18 @@
     border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted);
     padding:6px 11px; border-radius:999px; font-size:12px; cursor:pointer;
   }
+
+  /* ---------- new-client tab-choice modal ---------- */
+  .tcm-backdrop{
+    position:fixed; inset:0; background:rgba(20,20,19,0.45); z-index:60;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .tcm-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px; width:100%; max-width:320px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .tcm-card h3{margin:0 0 4px; font-size:15.5px;}
 </style>
 
 <div class="login-wrap" id="loginScreen" hidden>
@@ -319,6 +331,15 @@
 <div class="backdrop" id="backdrop"></div>
 <div class="drawer" id="drawer"></div>
 <div id="toastHost"></div>
+
+<div class="tcm-backdrop" id="tcmBackdrop" hidden>
+  <div class="tcm-card">
+    <h3>Куда добавить нового клиента?</h3>
+    <button type="button" class="btn" id="tcmFlow">Входящий / исходящий</button>
+    <button type="button" class="btn subtle" id="tcmDormant">Спящий клиент</button>
+    <button type="button" class="btn subtle" id="tcmCancel">Отмена</button>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -941,10 +962,15 @@ function renderList(){
 }
 
 function openNewClientFlow(){
-  // По умолчанию новый клиент попадает во "Входящие и исходящие".
-  // В "Спящих" — только если менеджер сам сейчас открыл именно эту вкладку.
-  const which = tabFilter==="dormant" ? "dormant" : "flow";
-  openDrawer(null, which);
+  // Всегда явно спрашиваем, в какую вкладку добавить — независимо от того,
+  // какая вкладка сейчас открыта у менеджера.
+  const backdropEl = document.getElementById("tcmBackdrop");
+  backdropEl.hidden = false;
+  const close = ()=>{ backdropEl.hidden = true; };
+  document.getElementById("tcmFlow").onclick = ()=>{ close(); openDrawer(null, "flow"); };
+  document.getElementById("tcmDormant").onclick = ()=>{ close(); openDrawer(null, "dormant"); };
+  document.getElementById("tcmCancel").onclick = close;
+  backdropEl.onclick = (e)=>{ if (e.target===backdropEl) close(); };
 }
 
 /* =====================================================================
@@ -1979,7 +2005,12 @@ document.getElementById("btnLogout").addEventListener("click", async ()=>{
 /* =====================================================================
    BOOT
    ===================================================================== */
-document.addEventListener("keydown", (e)=>{ if (e.key==="Escape" && drawerState) closeDrawer(); });
+document.addEventListener("keydown", (e)=>{
+  if (e.key!=="Escape") return;
+  const tcm = document.getElementById("tcmBackdrop");
+  if (tcm && !tcm.hidden){ tcm.hidden = true; return; }
+  if (drawerState) closeDrawer();
+});
 boot();
 
 })();
