@@ -179,6 +179,36 @@
   table.kpi tfoot td{font-weight:700; border-top:2px solid var(--border); border-bottom:none;}
   .grouphead{background:var(--surface-2); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); font-weight:700;}
 
+  /* ---------- KPI charts ---------- */
+  .kpi-charts-grid{display:flex; gap:16px; flex-wrap:wrap; margin-top:16px;}
+  .chart-card{flex:1 1 360px; min-width:0; max-width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 14px 10px;}
+  .chart-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
+  .chart-card-head h3{margin:0; font-size:13px; font-weight:700; color:var(--text);}
+  .chart-card-wrap{position:relative;}
+  .kpi-chart-svg{width:100%; height:auto; display:block; overflow:visible;}
+  .kpi-bar-hit{cursor:pointer;}
+  .kpi-bar-g .kpi-bar-rect{transition:opacity .1s;}
+  .kpi-bar-g:hover .kpi-bar-rect, .kpi-bar-g:focus .kpi-bar-rect, .kpi-bar-g.hover .kpi-bar-rect{opacity:.75;}
+  .kpi-bar-g{outline:none;}
+  .kpi-bar-g:focus .kpi-bar-hit{outline:2px solid var(--accent); outline-offset:-2px;}
+  .kpi-tooltip{
+    position:fixed; z-index:70; pointer-events:none; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:7px 10px; font-size:12px; box-shadow:var(--shadow); opacity:0; transition:opacity .08s;
+    max-width:220px;
+  }
+  .kpi-tooltip.show{opacity:1;}
+  .kpi-tooltip .tt-label{color:var(--text-muted); margin-bottom:2px;}
+  .kpi-tooltip .tt-value{color:var(--text); font-weight:700;}
+  .chart-table-toggle{background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:11px; font-weight:600; padding:4px 9px; border-radius:999px; cursor:pointer;}
+  .chart-table-toggle:hover{color:var(--text); border-color:var(--text-faint);}
+  .chart-table{display:none; width:100%; max-width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font-size:12px; margin-top:8px;}
+  .chart-table.show{display:table;}
+  .chart-table.show + .chart-card-wrap{display:none;}
+  .chart-table th, .chart-table td{padding:6px 8px; border-bottom:1px solid var(--border); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chart-table th:first-child, .chart-table td:first-child{text-align:left; font-weight:600;}
+  .chart-table thead th{color:var(--text-faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
+  .chart-empty{font-size:12.5px; color:var(--text-faint); padding:20px 0; text-align:center;}
+
   /* ---------- drawer ---------- */
   .backdrop{
     position:fixed; inset:0; background:rgba(20,18,12,0.4); backdrop-filter:blur(1px); z-index:40; opacity:0; pointer-events:none; transition:opacity .18s;
@@ -606,6 +636,57 @@ function toast(msg){
   setTimeout(()=>t.remove(), 2600);
 }
 
+/* =====================================================================
+   DUPLICATE DETECTION — предупреждение при похожем клиенте
+   ===================================================================== */
+function normCompanyName(s){
+  return (s||"").toLowerCase()
+    .replace(/[«»"'.,()]/g, "")
+    .replace(/\b(ооо|зао|оао|пао|нко|ип)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function normPhoneDigits(s){
+  const digits = (s||"").replace(/\D/g, "");
+  return digits ? digits.slice(-10) : "";
+}
+function normEmailStr(s){
+  return (s||"").trim().toLowerCase();
+}
+function findPossibleDuplicates(draft, excludeId){
+  const company = normCompanyName(draft.company);
+  const phone = normPhoneDigits(draft.phone);
+  const email = normEmailStr(draft.email);
+  const matches = [];
+  clients.forEach((c, id)=>{
+    if (id===excludeId) return;
+    let reason = null;
+    if (company && normCompanyName(c.company)===company) reason = "по названию компании";
+    else if (phone && normPhoneDigits(c.phone)===phone) reason = "по телефону";
+    else if (email && normEmailStr(c.email)===email) reason = "по email";
+    if (reason) matches.push({ id, c, reason });
+  });
+  return matches;
+}
+function showConfirmModal({ title, bodyHtml, confirmLabel="Всё равно сохранить", cancelLabel="Отмена" }){
+  return new Promise(resolve=>{
+    const backdrop = document.createElement("div");
+    backdrop.className = "tcm-backdrop";
+    backdrop.innerHTML = `
+      <div class="tcm-card">
+        <h3>${esc(title)}</h3>
+        ${bodyHtml}
+        <button type="button" class="btn" id="cmOk">${esc(confirmLabel)}</button>
+        <button type="button" class="btn subtle" id="cmCancel">${esc(cancelLabel)}</button>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const cleanup = (result)=>{ backdrop.remove(); resolve(result); };
+    backdrop.querySelector("#cmOk").onclick = ()=>cleanup(true);
+    backdrop.querySelector("#cmCancel").onclick = ()=>cleanup(false);
+    backdrop.onclick = (e)=>{ if (e.target===backdrop) cleanup(false); };
+  });
+}
+
 async function copyToClipboard(text){
   if (!text){ return; }
   try{
@@ -774,14 +855,24 @@ function matchesFilters(c){
 /* =====================================================================
    NAV
    ===================================================================== */
+const ACTIONABLE_STATUSES = ["Новый","В работе","Не дозвонился"];
+function needsAttentionToday(c){
+  if (!ACTIONABLE_STATUSES.includes(c.status)) return false;
+  if (!c.lastContactDate) return true;
+  const days = daysSince(c.lastContactDate);
+  return days==null || days>=5;
+}
+
 function renderNav(){
   const all = Array.from(clients.values());
   const nDormant = all.filter(c=>c.tab==="dormant").length;
   const nFlow = all.filter(c=>c.tab==="flow").length;
   const nAll = all.length;
+  const nToday = all.filter(needsAttentionToday).length;
   const nTransfer = all.filter(c=>computeScores(c).readyForTransfer).length;
   const nTransferred = all.filter(c=>c.status==="Передан в дивизион").length;
   const tabs = [
+    {key:"today", label:"На сегодня", count:nToday, view:"today"},
     {key:"dormant", label:"Спящие клиенты", count:nDormant, view:"list"},
     {key:"flow", label:"Входящие и исходящие", count:nFlow, view:"list"},
     {key:"all", label:"Все клиенты", count:nAll, view:"list"},
@@ -827,7 +918,64 @@ function renderMain(){
   if (view==="kpi") return renderKpi();
   if (view==="transfer") return renderTransfer();
   if (view==="transferred") return renderTransferred();
+  if (view==="today") return renderToday();
   return renderList();
+}
+
+/* =====================================================================
+   "НА СЕГОДНЯ" — клиенты, требующие внимания прямо сейчас
+   ===================================================================== */
+function renderToday(){
+  const main = document.getElementById("main");
+  const items = Array.from(clients.entries())
+    .filter(([,c])=>needsAttentionToday(c))
+    .map(([id,c])=>({ id, c, days: daysSince(c.lastContactDate) }));
+
+  items.sort((a,b)=>{
+    // без контакта вовсе — наверх; дальше — у кого дольше нет контакта
+    if (a.days==null && b.days==null) return 0;
+    if (a.days==null) return -1;
+    if (b.days==null) return 1;
+    return b.days - a.days;
+  });
+
+  const intro = `<div class="banner ${items.length>0?"warn":"good"}" style="align-items:flex-start;">
+    <div>
+      <b>Клиенты, с которыми стоит связаться:</b>
+      статус «Новый», «В работе» или «Не дозвонился», и либо контакта ещё не было, либо он был 5+ дней назад.
+    </div>
+  </div>`;
+
+  const block = items.length===0 ? `<div class="empty">Отлично — таких клиентов сейчас нет.</div>` : (()=>{
+    const rows = items.map(({id,c})=>`<tr data-id="${esc(id)}">
+      <td>
+        <div class="company">${esc(c.company||"(без названия)")}${copyBtnHtml(c.company)}</div>
+        <div class="code">${esc(c.code||"без кода")}</div>
+      </td>
+      <td class="muted">${esc(c.manager||"—")}</td>
+      <td class="muted">${esc(tabLabel(c))}</td>
+      <td><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
+      <td class="muted">${esc(c.region||"—")}</td>
+      <td class="muted">${esc(c.contactPerson||"—")}</td>
+      <td class="muted">${esc(c.phone||"—")}</td>
+      <td class="muted">${noContactBadge(c.lastContactDate)}</td>
+      <td class="muted">${esc(c.nextStep||"—")}</td>
+    </tr>`).join("");
+    return `<div class="tablewrap"><div class="tscroll"><table>
+      <thead><tr>
+        <th>Компания</th><th>Менеджер</th><th>Раздел</th><th>Статус</th><th>Регион</th>
+        <th>Контакт</th><th>Телефон</th><th>Посл. контакт</th><th>Следующий шаг</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div></div>`;
+  })();
+
+  main.innerHTML = `<div class="stats"><div class="stat"><b>${items.length}</b><span>нужно связаться</span></div></div>` + intro + block;
+
+  main.querySelectorAll("tbody tr").forEach(tr=>{
+    tr.onclick = ()=> openDrawer(tr.getAttribute("data-id"));
+  });
+  wireCopyButtons(main);
 }
 
 /* =====================================================================
@@ -1191,12 +1339,188 @@ function computeKpiData(){
   return {managers, buckets, bucketLabels, statsFor, perManager, grand, grandTotal, source};
 }
 
+/* =====================================================================
+   ГРАФИКИ ДАШБОРДА KPI — рукописный inline SVG (без внешних библиотек)
+   ===================================================================== */
+const KPI_MONTH_NAMES_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+
+function computeMonthlyRegistrations(source){
+  const map = new Map();
+  source.forEach(c=>{
+    const rd = c.registrationDate;
+    if (!rd || !/^\d{4}-\d{2}/.test(rd)) return;
+    const key = rd.slice(0,7);
+    map.set(key, (map.get(key)||0)+1);
+  });
+  const keys = Array.from(map.keys()).sort();
+  const last = keys.slice(-12); // не больше 12 последних месяцев — иначе график становится нечитаемым
+  return last.map(k=>{
+    const [y,m] = k.split("-").map(Number);
+    return {label: `${KPI_MONTH_NAMES_RU[m-1]} ${String(y).slice(2)}`, value: map.get(k), key:k};
+  });
+}
+
+function computeManagerConversionChart(perManager){
+  return perManager
+    .filter(r=>r.totalStats.total>0)
+    .map(r=>({label:r.manager, value: r.totalStats.conv, total:r.totalStats.total, done:r.totalStats.done}))
+    .sort((a,b)=>b.value-a.value);
+}
+
+function niceAxisStep(maxVal){
+  if (maxVal<=0) return {axisMax:1, step:1};
+  const rough = maxVal/4;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough/mag;
+  let step;
+  if (norm<1.5) step = 1*mag; else if (norm<3) step = 2*mag; else if (norm<7) step = 5*mag; else step = 10*mag;
+  step = step || 1;
+  const axisMax = Math.ceil(maxVal/step)*step;
+  return {axisMax: axisMax||1, step};
+}
+
+function roundedTopBarPath(x,yTop,w,h,r){
+  if (h<=0) return "";
+  r = Math.max(0, Math.min(r, w/2, h));
+  const yBase = yTop + h;
+  if (r<=0.01) return `M${x},${yBase} L${x},${yTop} L${x+w},${yTop} L${x+w},${yBase} Z`;
+  return `M${x},${yBase} L${x},${yTop+r} Q${x},${yTop} ${x+r},${yTop} L${x+w-r},${yTop} Q${x+w},${yTop} ${x+w},${yTop+r} L${x+w},${yBase} Z`;
+}
+
+// data: [{label, value, ...extra}]; opts: {colorVar, valueFmt, tickFmt, height}
+function buildKpiBarChart(data, opts){
+  opts = opts||{};
+  const colorVar = opts.colorVar || "--accent";
+  const valueFmt = opts.valueFmt || (v=>String(Math.round(v)));
+  const tickFmt = opts.tickFmt || (v=>String(Math.round(v)));
+  const width = 560, height = opts.height || 220;
+  const pad = {top:18, right:10, bottom:28, left:34};
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const maxDataVal = Math.max(0, ...data.map(d=>d.value));
+  const {axisMax, step} = niceAxisStep(maxDataVal);
+  const n = Math.max(data.length,1);
+  const slot = innerW / n;
+  const barW = Math.max(8, Math.min(24, slot - 14));
+
+  const yTicks = [];
+  for (let v=0; v<=axisMax+1e-9; v+=step) yTicks.push(v);
+  const yOf = v => pad.top + innerH - (axisMax>0 ? (v/axisMax)*innerH : 0);
+
+  const gridSvg = yTicks.map(v=>{
+    const yy = yOf(v);
+    return `<line x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+      + `<text x="${(pad.left-7).toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--text-faint)">${esc(tickFmt(v))}</text>`;
+  }).join("");
+
+  const barsSvg = data.map((d,i)=>{
+    const cx = pad.left + slot*i + slot/2;
+    const x = cx - barW/2;
+    const barH = axisMax>0 ? Math.max(0,(d.value/axisMax))*innerH : 0;
+    const yTop = pad.top + innerH - barH;
+    const path = roundedTopBarPath(x, yTop, barW, barH, 4);
+    const valueLabelY = Math.max(pad.top+9, yTop-6);
+    return `<g class="kpi-bar-g" tabindex="0" data-idx="${i}">
+      <path d="${path}" fill="var(${colorVar})" class="kpi-bar-rect"/>
+      <rect x="${(x-6).toFixed(1)}" y="${pad.top}" width="${(barW+12).toFixed(1)}" height="${innerH}" fill="transparent" class="kpi-bar-hit" data-idx="${i}"/>
+      <text x="${cx.toFixed(1)}" y="${valueLabelY.toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${esc(valueFmt(d.value))}</text>
+      <text x="${cx.toFixed(1)}" y="${(pad.top+innerH+15).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${esc(d.label.length>10? d.label.slice(0,9)+"…" : d.label)}</text>
+    </g>`;
+  }).join("");
+
+  const svg = `<svg viewBox="0 0 ${width} ${height}" class="kpi-chart-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="диаграмма">
+    ${gridSvg}
+    <line x1="${pad.left}" y1="${(pad.top+innerH).toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${(pad.top+innerH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+    ${barsSvg}
+  </svg>`;
+  return svg;
+}
+
+function buildKpiChartCard(opts){
+  // opts: {id, title, data, colorVar, valueFmt, tickFmt, tooltipFmt(d), tableHead, tableRow(d)}
+  const {id, title, data} = opts;
+  if (!data.length){
+    return `<div class="chart-card">
+      <div class="chart-card-head"><h3>${esc(title)}</h3></div>
+      <div class="chart-empty">Нет данных за выбранный период</div>
+    </div>`;
+  }
+  const svg = buildKpiBarChart(data, opts);
+  const rows = data.map(opts.tableRow).join("");
+  return `<div class="chart-card" data-chart-id="${id}">
+    <div class="chart-card-head">
+      <h3>${esc(title)}</h3>
+      <button type="button" class="chart-table-toggle" data-toggle-for="${id}">Таблица</button>
+    </div>
+    <table class="chart-table" id="tbl_${id}">
+      <thead><tr>${opts.tableHead}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="chart-card-wrap" id="wrap_${id}">${svg}</div>
+  </div>`;
+}
+
+function wireKpiChart(id, data, tooltipFmt, tooltipEl){
+  const wrap = document.getElementById("wrap_"+id);
+  if (!wrap) return;
+  const groups = wrap.querySelectorAll(".kpi-bar-g");
+  groups.forEach(g=>{
+    const idx = parseInt(g.getAttribute("data-idx"),10);
+    const d = data[idx];
+    const show = (clientX, clientY)=>{
+      tooltipEl.innerHTML = tooltipFmt(d);
+      tooltipEl.classList.add("show");
+      const ttW = tooltipEl.offsetWidth||160, ttH = tooltipEl.offsetHeight||40;
+      let left = clientX + 14, top = clientY - ttH - 10;
+      if (left + ttW > window.innerWidth - 8) left = clientX - ttW - 14;
+      if (top < 8) top = clientY + 14;
+      tooltipEl.style.left = left+"px";
+      tooltipEl.style.top = top+"px";
+    };
+    const hide = ()=> tooltipEl.classList.remove("show");
+    g.addEventListener("pointermove", e=> show(e.clientX, e.clientY));
+    g.addEventListener("pointerenter", e=> show(e.clientX, e.clientY));
+    g.addEventListener("pointerleave", hide);
+    g.addEventListener("focus", ()=>{
+      const rect = g.querySelector(".kpi-bar-hit").getBoundingClientRect();
+      show(rect.left+rect.width/2, rect.top);
+    });
+    g.addEventListener("blur", hide);
+  });
+  const toggleBtn = document.querySelector(`.chart-table-toggle[data-toggle-for="${id}"]`);
+  const tbl = document.getElementById("tbl_"+id);
+  if (toggleBtn && tbl){
+    toggleBtn.onclick = ()=>{
+      const showing = tbl.classList.toggle("show");
+      toggleBtn.textContent = showing ? "График" : "Таблица";
+    };
+  }
+}
+
 function renderKpi(){
   const main = document.getElementById("main");
-  const {buckets, bucketLabels, perManager, grand, grandTotal} = computeKpiData();
+  const {buckets, bucketLabels, perManager, grand, grandTotal, source} = computeKpiData();
 
   const headCells = buckets.map(b=>`<th colspan="3">${bucketLabels[b]}</th>`).join("");
   const subCells = buckets.map(()=>`<th>Всего</th><th>Заказ</th><th>Конв.</th>`).join("");
+
+  const monthlyRegData = computeMonthlyRegistrations(source);
+  const managerConvData = computeManagerConversionChart(perManager);
+
+  const monthlyChartHtml = buildKpiChartCard({
+    id:"monthly", title:"Новые клиенты по месяцам (дата регистрации)",
+    data: monthlyRegData, colorVar:"--accent",
+    valueFmt: v=>String(v), tickFmt: v=>String(Math.round(v)),
+    tableHead: `<th style="width:55%;">Месяц</th><th>Новых клиентов</th>`,
+    tableRow: d=>`<tr><td>${esc(d.label)}</td><td>${d.value}</td></tr>`
+  });
+  const convChartHtml = buildKpiChartCard({
+    id:"convmgr", title:"Конверсия в заказ по менеджерам, %",
+    data: managerConvData, colorVar:"--info",
+    valueFmt: v=>v.toFixed(0)+"%", tickFmt: v=>Math.round(v)+"%",
+    tableHead: `<th style="width:40%;">Менеджер</th><th>Заявок</th><th>Заказов</th><th>Конв.</th>`,
+    tableRow: d=>`<tr><td title="${esc(d.label)}">${esc(d.label)}</td><td>${d.total}</td><td>${d.done}</td><td>${d.value.toFixed(0)}%</td></tr>`
+  });
 
   function rowCells(r){
     return buckets.map(b=>{
@@ -1237,7 +1561,12 @@ function renderKpi(){
       </table>
       </div>
       <div class="helptext" style="margin-top:10px;">«Заказ» считается по статусу «Активен (сделал заказ)» или «Передан в дивизион». Обновляйте статус по факту первой отгрузки, чтобы конверсия считалась верно. Период фильтрует по дате регистрации партнёра; клиенты без даты регистрации при выбранном периоде не учитываются.</div>
-    </div>`;
+      <div class="kpi-charts-grid">
+        ${monthlyChartHtml}
+        ${convChartHtml}
+      </div>
+    </div>
+    <div class="kpi-tooltip" id="kpiTooltip"></div>`;
 
   const btnExp = document.getElementById("btnExportKpi");
   if (btnExp) btnExp.onclick = downloadKpiExcel;
@@ -1247,6 +1576,16 @@ function renderKpi(){
   document.getElementById("kpiTo").onchange = (e)=>{ kpiPeriod.to = e.target.value; renderKpi(); };
   const kpiClearBtn = document.getElementById("btnKpiPeriodClear");
   if (kpiClearBtn) kpiClearBtn.onclick = ()=>{ kpiPeriod.from=""; kpiPeriod.to=""; renderKpi(); };
+
+  const kpiTooltip = document.getElementById("kpiTooltip");
+  if (kpiTooltip){
+    if (monthlyRegData.length){
+      wireKpiChart("monthly", monthlyRegData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${esc(String(d.value))} нов. клиентов</div>`, kpiTooltip);
+    }
+    if (managerConvData.length){
+      wireKpiChart("convmgr", managerConvData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${d.value.toFixed(0)}% (${d.done} из ${d.total})</div>`, kpiTooltip);
+    }
+  }
 }
 
 /* =====================================================================
@@ -1891,6 +2230,25 @@ async function saveDrawer(){
     toast("Укажите название компании");
     return;
   }
+  if (isNew){
+    const dups = findPossibleDuplicates(draft, id);
+    if (dups.length){
+      const listHtml = dups.slice(0,5).map(d=>
+        `<div class="muted" style="font-size:13px;">— <b>${esc(d.c.company||"—")}</b> (совпадение ${esc(d.reason)}${d.c.code?", код "+esc(d.c.code):""}, менеджер: ${esc(d.c.manager||"—")})</div>`
+      ).join("");
+      const moreHtml = dups.length>5 ? `<div class="muted" style="font-size:12px;">…и ещё ${dups.length-5}</div>` : "";
+      const proceed = await showConfirmModal({
+        title: "Похоже, такой клиент уже есть",
+        bodyHtml: `<div style="display:flex;flex-direction:column;gap:4px;margin:4px 0 8px;">${listHtml}${moreHtml}</div><div class="helptext">Сохранить всё равно, или отменить и проверить карточку?</div>`,
+      });
+      if (!proceed) return;
+    }
+  }
+  await performSaveDrawer();
+}
+
+async function performSaveDrawer(){
+  const { id, isNew, draft } = drawerState;
   draft.updatedAt = nowISO();
   draft.updatedBy = currentManager() || draft.updatedBy || "";
   if (!Array.isArray(draft.statusHistory)) draft.statusHistory = [];
