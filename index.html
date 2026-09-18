@@ -734,19 +734,24 @@ function toast(msg){
 /* =====================================================================
    DUPLICATE DETECTION — предупреждение при похожем клиенте
    ===================================================================== */
+function asStr(s){
+  // защита от нестроковых значений в старых/импортированных данных
+  // (например, телефон, попавший в базу как число, а не строка)
+  return (s==null) ? "" : String(s);
+}
 function normCompanyName(s){
-  return (s||"").toLowerCase()
+  return asStr(s).toLowerCase()
     .replace(/[«»"'.,()]/g, "")
     .replace(/\b(ооо|зао|оао|пао|нко|ип)\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 function normPhoneDigits(s){
-  const digits = (s||"").replace(/\D/g, "");
+  const digits = asStr(s).replace(/\D/g, "");
   return digits ? digits.slice(-10) : "";
 }
 function normEmailStr(s){
-  return (s||"").trim().toLowerCase();
+  return asStr(s).trim().toLowerCase();
 }
 function findPossibleDuplicates(draft, excludeId){
   const company = normCompanyName(draft.company);
@@ -2295,7 +2300,14 @@ async function saveDrawer(){
     return;
   }
   if (isNew){
-    const dups = findPossibleDuplicates(draft, id);
+    let dups = [];
+    try{
+      dups = findPossibleDuplicates(draft, id);
+    }catch(e){
+      // проверка на дубли — вспомогательная; если она сама сломалась на каких-то
+      // старых данных, это не должно мешать сохранению нового клиента
+      console.error(e);
+    }
     if (dups.length){
       const listHtml = dups.slice(0,5).map(d=>
         `<div class="muted" style="font-size:13px;">— <b>${esc(d.c.company||"—")}</b> (совпадение ${esc(d.reason)}${d.c.code?", код "+esc(d.c.code):""}, менеджер: ${esc(d.c.manager||"—")})</div>`
