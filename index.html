@@ -854,7 +854,13 @@ function makeSupabaseDb(){
       })
       .subscribe(status=>{
         if (status==="CHANNEL_ERROR" || status==="TIMED_OUT" || status==="CLOSED"){
-          logEvent("realtime", "Статус канала обновлений: "+status);
+          logEvent("realtime", "Статус канала обновлений: "+status+" — переподключение через 3с");
+          const broken = channel;
+          channel = null;
+          try{ supabase.removeChannel(broken); }catch(e){}
+          setTimeout(ensureRealtime, 3000);
+        } else if (status==="SUBSCRIBED"){
+          logEvent("realtime", "Канал обновлений подключён");
         }
       });
   }
@@ -873,6 +879,10 @@ function makeSupabaseDb(){
           const id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("id-"+Date.now()+"-"+Math.random().toString(36).slice(2));
           const { error } = await supabase.from("clients").insert({ id, data });
           if (error) throw error;
+          // обновляем локальный кэш сразу — не полагаемся только на realtime-канал
+          // (если он в этот момент разорван, интерфейс всё равно должен обновиться)
+          cache.set(id, data);
+          notify();
           return { id };
         },
       };
@@ -885,14 +895,20 @@ function makeSupabaseDb(){
           const merged = Object.assign({}, current, patch);
           const { error } = await supabase.from("clients").update({ data: merged }).eq("id", id);
           if (error) throw error;
+          cache.set(id, merged);
+          notify();
         },
         async set(data){
           const { error } = await supabase.from("clients").upsert({ id, data });
           if (error) throw error;
+          cache.set(id, data);
+          notify();
         },
         async delete(){
           const { error } = await supabase.from("clients").delete().eq("id", id);
           if (error) throw error;
+          cache.delete(id);
+          notify();
         },
       };
     },
@@ -2285,6 +2301,13 @@ async function saveDrawer(){
   await performSaveDrawer();
 }
 
+function formatDbError(e){
+  if (!e) return "неизвестная ошибка";
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message || String(e);
+  return e.message || e.details || e.hint || (e.code ? ("код "+e.code) : "") || "неизвестная ошибка — подробности в логе (кнопка «Лог» в шапке)";
+}
+
 async function performSaveDrawer(){
   const { id, isNew, draft } = drawerState;
   draft.updatedAt = nowISO();
@@ -2313,7 +2336,7 @@ async function performSaveDrawer(){
     closeDrawer();
   }catch(e){
     console.error(e);
-    toast("Ошибка сохранения: "+(e&&e.code||e));
+    toast("Ошибка сохранения: "+formatDbError(e));
   }
 }
 async function deleteDrawer(){
@@ -2324,7 +2347,8 @@ async function deleteDrawer(){
     toast("Удалено");
     closeDrawer();
   }catch(e){
-    toast("Ошибка удаления: "+(e&&e.code||e));
+    console.error(e);
+    toast("Ошибка удаления: "+formatDbError(e));
   }
 }
 
