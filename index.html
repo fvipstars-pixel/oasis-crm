@@ -855,24 +855,14 @@ function matchesFilters(c){
 /* =====================================================================
    NAV
    ===================================================================== */
-const ACTIONABLE_STATUSES = ["Новый","В работе","Не дозвонился"];
-function needsAttentionToday(c){
-  if (!ACTIONABLE_STATUSES.includes(c.status)) return false;
-  if (!c.lastContactDate) return true;
-  const days = daysSince(c.lastContactDate);
-  return days==null || days>=5;
-}
-
 function renderNav(){
   const all = Array.from(clients.values());
   const nDormant = all.filter(c=>c.tab==="dormant").length;
   const nFlow = all.filter(c=>c.tab==="flow").length;
   const nAll = all.length;
-  const nToday = all.filter(needsAttentionToday).length;
   const nTransfer = all.filter(c=>computeScores(c).readyForTransfer).length;
   const nTransferred = all.filter(c=>c.status==="Передан в дивизион").length;
   const tabs = [
-    {key:"today", label:"На сегодня", count:nToday, view:"today"},
     {key:"dormant", label:"Спящие клиенты", count:nDormant, view:"list"},
     {key:"flow", label:"Входящие и исходящие", count:nFlow, view:"list"},
     {key:"all", label:"Все клиенты", count:nAll, view:"list"},
@@ -918,64 +908,7 @@ function renderMain(){
   if (view==="kpi") return renderKpi();
   if (view==="transfer") return renderTransfer();
   if (view==="transferred") return renderTransferred();
-  if (view==="today") return renderToday();
   return renderList();
-}
-
-/* =====================================================================
-   "НА СЕГОДНЯ" — клиенты, требующие внимания прямо сейчас
-   ===================================================================== */
-function renderToday(){
-  const main = document.getElementById("main");
-  const items = Array.from(clients.entries())
-    .filter(([,c])=>needsAttentionToday(c))
-    .map(([id,c])=>({ id, c, days: daysSince(c.lastContactDate) }));
-
-  items.sort((a,b)=>{
-    // без контакта вовсе — наверх; дальше — у кого дольше нет контакта
-    if (a.days==null && b.days==null) return 0;
-    if (a.days==null) return -1;
-    if (b.days==null) return 1;
-    return b.days - a.days;
-  });
-
-  const intro = `<div class="banner ${items.length>0?"warn":"good"}" style="align-items:flex-start;">
-    <div>
-      <b>Клиенты, с которыми стоит связаться:</b>
-      статус «Новый», «В работе» или «Не дозвонился», и либо контакта ещё не было, либо он был 5+ дней назад.
-    </div>
-  </div>`;
-
-  const block = items.length===0 ? `<div class="empty">Отлично — таких клиентов сейчас нет.</div>` : (()=>{
-    const rows = items.map(({id,c})=>`<tr data-id="${esc(id)}">
-      <td>
-        <div class="company">${esc(c.company||"(без названия)")}${copyBtnHtml(c.company)}</div>
-        <div class="code">${esc(c.code||"без кода")}</div>
-      </td>
-      <td class="muted">${esc(c.manager||"—")}</td>
-      <td class="muted">${esc(tabLabel(c))}</td>
-      <td><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
-      <td class="muted">${esc(c.region||"—")}</td>
-      <td class="muted">${esc(c.contactPerson||"—")}</td>
-      <td class="muted">${esc(c.phone||"—")}</td>
-      <td class="muted">${noContactBadge(c.lastContactDate)}</td>
-      <td class="muted">${esc(c.nextStep||"—")}</td>
-    </tr>`).join("");
-    return `<div class="tablewrap"><div class="tscroll"><table>
-      <thead><tr>
-        <th>Компания</th><th>Менеджер</th><th>Раздел</th><th>Статус</th><th>Регион</th>
-        <th>Контакт</th><th>Телефон</th><th>Посл. контакт</th><th>Следующий шаг</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div></div>`;
-  })();
-
-  main.innerHTML = `<div class="stats"><div class="stat"><b>${items.length}</b><span>нужно связаться</span></div></div>` + intro + block;
-
-  main.querySelectorAll("tbody tr").forEach(tr=>{
-    tr.onclick = ()=> openDrawer(tr.getAttribute("data-id"));
-  });
-  wireCopyButtons(main);
 }
 
 /* =====================================================================
