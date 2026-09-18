@@ -333,6 +333,7 @@
       <button type="submit" id="loginBtn">Войти</button>
       <div class="login-error" id="loginError"></div>
     </form>
+    <button type="button" id="btnDownloadLogLogin" style="margin-top:14px;background:none;border:none;color:var(--text-faint);font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0;">Скачать лог событий браузера</button>
   </div>
 </div>
 
@@ -347,6 +348,7 @@
     </div>
     <div class="whoami">
       Я: <span class="whoami-name" id="whoamiName">—</span>
+      <button type="button" class="whoami-logout" id="btnDownloadLog" title="Скачать лог событий этого браузера — приложите файл, если что-то работает не так">⬇ Лог</button>
       <button type="button" class="whoami-logout" id="btnLogout">Выйти</button>
     </div>
   </div>
@@ -383,6 +385,97 @@ const SUPABASE_URL = "https://wglvwfusdlonkfbchmpe.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JOo52vl_iKr8hNlYaWhAqQ_Ixa1a-jh";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let CURRENT_USER = null; // { email, displayName, role }
+
+/* =====================================================================
+   ЛОГ СОБЫТИЙ ПРИЛОЖЕНИЯ — для быстрой диагностики ошибок.
+   Пишет breadcrumbs (навигация, сохранения, тосты) + все ошибки/исключения
+   в этом браузере. При проблеме пользователь жмёт "Скачать лог" в шапке
+   и присылает файл — там весь ход событий прямо перед сбоем.
+   ===================================================================== */
+const APP_LOG_KEY = "oasis_crm_log_v1";
+const APP_LOG_MAX = 600;
+let appLog = [];
+(function loadAppLog(){
+  try{
+    const raw = localStorage.getItem(APP_LOG_KEY);
+    if (raw) appLog = JSON.parse(raw).slice(-APP_LOG_MAX);
+  }catch(e){ appLog = []; }
+})();
+function saveAppLogToStorage(){
+  try{ localStorage.setItem(APP_LOG_KEY, JSON.stringify(appLog.slice(-APP_LOG_MAX))); }catch(e){ /* переполнено/недоступно — не критично */ }
+}
+function safeLogExtra(extra){
+  try{
+    if (extra instanceof Error) return { name: extra.name, message: extra.message, stack: extra.stack };
+    if (extra && typeof extra==="object" && ("message" in extra || "code" in extra || "details" in extra || "hint" in extra)){
+      // похоже на ошибку Supabase/Postgres — вытащим типичные поля явно
+      return { message: extra.message, code: extra.code, details: extra.details, hint: extra.hint };
+    }
+    return JSON.parse(JSON.stringify(extra));
+  }catch(e){ return String(extra); }
+}
+function logEvent(type, message, extra){
+  try{
+    const entry = {
+      t: new Date().toISOString(),
+      type: type,
+      user: (typeof CURRENT_USER!=="undefined" && CURRENT_USER) ? (CURRENT_USER.displayName+" <"+CURRENT_USER.email+">") : "—",
+      view: (typeof view!=="undefined") ? view : null,
+      message: (message==null? "" : String(message)),
+    };
+    if (extra!=null) entry.extra = safeLogExtra(extra);
+    appLog.push(entry);
+    if (appLog.length > APP_LOG_MAX) appLog = appLog.slice(-APP_LOG_MAX);
+    saveAppLogToStorage();
+  }catch(e){ /* логирование не должно ронять приложение */ }
+}
+window.addEventListener("error", function(e){
+  logEvent("js-error", e.message, { filename: e.filename, lineno: e.lineno, colno: e.colno, stack: e.error && e.error.stack });
+});
+window.addEventListener("unhandledrejection", function(e){
+  const reason = e.reason;
+  logEvent("unhandled-rejection", (reason && reason.message) ? reason.message : String(reason), reason);
+});
+(function wrapConsoleError(){
+  const orig = console.error.bind(console);
+  console.error = function(){
+    try{
+      const args = Array.prototype.slice.call(arguments);
+      const msg = args.map(a=> a instanceof Error ? a.message : (typeof a==="object" ? JSON.stringify(a) : String(a))).join(" ");
+      logEvent("console-error", msg, args.length===1 ? args[0] : args);
+    }catch(e){}
+    orig.apply(console, arguments);
+  };
+})();
+function downloadAppLog(){
+  const lines = [
+    "OASIS CRM — ЛОГ СОБЫТИЙ ПРИЛОЖЕНИЯ",
+    "Экспортирован: " + new Date().toLocaleString("ru-RU"),
+    "Пользователь: " + (CURRENT_USER ? (CURRENT_USER.displayName+" ("+CURRENT_USER.email+", роль: "+CURRENT_USER.role+")") : "не авторизован"),
+    "Текущий экран: " + (typeof view!=="undefined" ? view : "—"),
+    "Браузер: " + navigator.userAgent,
+    "Записей в логе: " + appLog.length,
+    "======================================================",
+    ""
+  ];
+  appLog.forEach(e=>{
+    let line = "["+e.t+"] ["+e.type+"] ("+e.user+") "+e.message;
+    if (e.extra!=null) line += "\n    " + JSON.stringify(e.extra);
+    lines.push(line);
+  });
+  const blob = new Blob([lines.join("\n")], {type:"text/plain;charset=utf-8"});
+  const fname = "oasis_crm_log_" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".txt";
+  saveBlobAsFile(fname, blob);
+  logEvent("export", "Лог событий скачан пользователем");
+  toast("Лог сохранён в файл");
+}
+function clearAppLog(){
+  if (!confirm("Очистить лог событий этого браузера?")) return;
+  appLog = [];
+  saveAppLogToStorage();
+  logEvent("log", "Лог очищен пользователем");
+  toast("Лог очищен");
+}
 
 /* =====================================================================
    REFERENCE DATA — mirrors "Справочники" from Шаблон_воронка_скоринг.xlsx
@@ -634,6 +727,7 @@ function toast(msg){
   t.className="toast"; t.textContent=msg;
   host.appendChild(t);
   setTimeout(()=>t.remove(), 2600);
+  logEvent("toast", msg);
 }
 
 /* =====================================================================
@@ -758,7 +852,11 @@ function makeSupabaseDb(){
         }
         notify();
       })
-      .subscribe();
+      .subscribe(status=>{
+        if (status==="CHANNEL_ERROR" || status==="TIMED_OUT" || status==="CLOSED"){
+          logEvent("realtime", "Статус канала обновлений: "+status);
+        }
+      });
   }
   return {
     collection(name){
@@ -880,6 +978,7 @@ function renderNav(){
     btn.addEventListener("click", ()=>{
       const key = btn.getAttribute("data-nav");
       const t = tabs.find(x=>x.key===key);
+      logEvent("nav", "Переход на вкладку: "+t.label);
       view = t.view;
       if (t.view==="list") tabFilter = key;
       visibleLimit = 80;
@@ -1469,6 +1568,8 @@ function renderKpi(){
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn subtle sm" id="btnExportKpi">⬇ Скачать Excel</button>
           <button class="btn subtle sm" id="btnExportJson">⬇ JSON (резервная копия базы)</button>
+          <button class="btn subtle sm" id="btnDownloadLog2" title="Лог событий этого браузера — для отладки ошибок">⬇ Лог событий</button>
+          <button class="btn subtle sm" id="btnClearLog" title="Очистить лог событий этого браузера">🧹 Очистить лог</button>
         </div>
       </div>
       <div class="toolbar" style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1505,6 +1606,10 @@ function renderKpi(){
   if (btnExp) btnExp.onclick = downloadKpiExcel;
   const btnJson = document.getElementById("btnExportJson");
   if (btnJson) btnJson.onclick = downloadFullJsonBackup;
+  const btnLog2 = document.getElementById("btnDownloadLog2");
+  if (btnLog2) btnLog2.onclick = downloadAppLog;
+  const btnClearLog = document.getElementById("btnClearLog");
+  if (btnClearLog) btnClearLog.onclick = clearAppLog;
   document.getElementById("kpiFrom").onchange = (e)=>{ kpiPeriod.from = e.target.value; renderKpi(); };
   document.getElementById("kpiTo").onchange = (e)=>{ kpiPeriod.to = e.target.value; renderKpi(); };
   const kpiClearBtn = document.getElementById("btnKpiPeriodClear");
@@ -2233,6 +2338,7 @@ async function resolveIdentity(session){
     throw new Error("Этот email не найден в списке менеджеров. Обратитесь к администратору.");
   }
   CURRENT_USER = { email, displayName: data.display_name, role: data.role };
+  logEvent("auth", "Сессия распознана: "+data.display_name+" ("+data.role+")");
 }
 
 function showLogin(msg){
@@ -2278,9 +2384,11 @@ document.getElementById("loginForm").addEventListener("submit", async (e)=>{
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     await resolveIdentity(data.session);
+    logEvent("auth", "Вход выполнен: "+email);
     await showApp();
   }catch(ex){
     err.textContent = (ex.message==="Invalid login credentials") ? "Неверный email или пароль" : ex.message;
+    logEvent("auth-error", "Ошибка входа для "+email, ex);
     await supabase.auth.signOut().catch(()=>{});
   }finally{
     btn.disabled = false; btn.textContent = "Войти";
@@ -2288,10 +2396,14 @@ document.getElementById("loginForm").addEventListener("submit", async (e)=>{
 });
 
 document.getElementById("btnLogout").addEventListener("click", async ()=>{
+  logEvent("auth", "Выход из аккаунта");
   if (unsub){ try{ unsub(); }catch(e){} }
   await supabase.auth.signOut();
   location.reload();
 });
+
+document.getElementById("btnDownloadLog").addEventListener("click", downloadAppLog);
+document.getElementById("btnDownloadLogLogin").addEventListener("click", downloadAppLog);
 
 /* =====================================================================
    BOOT
