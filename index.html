@@ -690,6 +690,7 @@ function compareSortValues(va, vb, dir){
 }
 let visibleLimit = 80;
 let drawerState = null; // {id, isNew, draft}
+let drawerBusy = false; // защита от повторной отправки (двойной клик/дребезг мыши, гонки сети)
 const transferSelected = new Set(); // id-ы, отмеченные для массовой передачи в дивизион
 let bulkTransferDate = todayISO();
 
@@ -857,7 +858,14 @@ function makeSupabaseDb(){
           logEvent("realtime", "Статус канала обновлений: "+status+" — переподключение через 3с");
           const broken = channel;
           channel = null;
-          try{ supabase.removeChannel(broken); }catch(e){}
+          try{
+            // removeChannel() зовёт unsubscribe(), который возвращает Promise —
+            // в момент обрыва канал уже в процессе внутренней очистки, и эта
+            // проверка иногда отклоняется асинхронно. Гасим и синхронный throw,
+            // и асинхронный reject, чтобы это не улетало в unhandledrejection.
+            const p = supabase.removeChannel(broken);
+            if (p && typeof p.catch === "function") p.catch(()=>{});
+          }catch(e){}
           setTimeout(ensureRealtime, 3000);
         } else if (status==="SUBSCRIBED"){
           logEvent("realtime", "Канал обновлений подключён");
@@ -2009,6 +2017,7 @@ function openDrawer(id, newTab){
   const isNew = !id;
   const draft = isNew ? blankClient(newTab) : JSON.parse(JSON.stringify(clients.get(id)));
   drawerState = { id, isNew, draft };
+  drawerBusy = false;
   document.getElementById("backdrop").classList.add("show");
   document.getElementById("backdrop").onclick = closeDrawer;
   renderDrawer();
@@ -2051,9 +2060,9 @@ function renderDrawer(){
     </div>`;
 
   document.getElementById("btnClose").onclick = closeDrawer;
-  document.getElementById("btnSave").onclick = saveDrawer;
+  document.getElementById("btnSave").onclick = ()=> saveDrawer();
   const delBtn = document.getElementById("btnDelete");
-  if (delBtn) delBtn.onclick = deleteDrawer;
+  if (delBtn) delBtn.onclick = ()=> deleteDrawer();
   wireCopyButtons(drawer);
 
   renderDrawerBody();
@@ -2279,6 +2288,7 @@ function onDraftChanged(){
 }
 
 async function saveDrawer(){
+  if (drawerBusy) return;
   const { id, isNew, draft } = drawerState;
   if (!draft.company || !draft.company.trim()){
     toast("Укажите название компании");
@@ -2308,7 +2318,19 @@ function formatDbError(e){
   return e.message || e.details || e.hint || (e.code ? ("код "+e.code) : "") || "неизвестная ошибка — подробности в логе (кнопка «Лог» в шапке)";
 }
 
-async function performSaveDrawer(){
+function isTransientNetworkError(e){
+  const msg = String((e && (e.message || e)) || "");
+  return /load failed|failed to fetch|networkerror|network request failed|network connection was lost/i.test(msg);
+}
+function setDrawerButtonsDisabled(disabled){
+  const saveBtn = document.getElementById("btnSave");
+  const delBtn = document.getElementById("btnDelete");
+  if (saveBtn){ saveBtn.disabled = disabled; saveBtn.textContent = disabled ? "Сохраняем…" : "Сохранить"; }
+  if (delBtn){ delBtn.disabled = disabled; }
+}
+
+async function performSaveDrawer(retryCount){
+  retryCount = retryCount || 0;
   const { id, isNew, draft } = drawerState;
   draft.updatedAt = nowISO();
   draft.updatedBy = currentManager() || draft.updatedBy || "";
@@ -2324,6 +2346,8 @@ async function performSaveDrawer(){
     }
   }
   if (!db){ toast("База данных недоступна"); return; }
+  drawerBusy = true;
+  setDrawerButtonsDisabled(true);
   try{
     if (isNew){
       draft.createdAt = nowISO();
@@ -2333,21 +2357,41 @@ async function performSaveDrawer(){
       await db.doc("clients/"+id).set(draft);
       toast("Сохранено");
     }
+    drawerBusy = false;
     closeDrawer();
   }catch(e){
     console.error(e);
+    if (isTransientNetworkError(e) && retryCount<1){
+      logEvent("retry", "Сетевая ошибка при сохранении — пробуем ещё раз через 1с", e);
+      setTimeout(()=>{ performSaveDrawer(retryCount+1); }, 1000);
+      return; // остаёмся в состоянии "занято" на время повтора
+    }
+    drawerBusy = false;
+    setDrawerButtonsDisabled(false);
     toast("Ошибка сохранения: "+formatDbError(e));
   }
 }
-async function deleteDrawer(){
+async function deleteDrawer(retryCount){
+  retryCount = retryCount || 0;
+  if (drawerBusy) return;
   const { id, draft } = drawerState;
-  if (!confirm("Удалить карточку «"+draft.company+"»? Это необратимо.")) return;
+  if (!retryCount && !confirm("Удалить карточку «"+draft.company+"»? Это необратимо.")) return;
+  drawerBusy = true;
+  setDrawerButtonsDisabled(true);
   try{
     await db.doc("clients/"+id).delete();
     toast("Удалено");
+    drawerBusy = false;
     closeDrawer();
   }catch(e){
     console.error(e);
+    if (isTransientNetworkError(e) && retryCount<1){
+      logEvent("retry", "Сетевая ошибка при удалении — пробуем ещё раз через 1с", e);
+      setTimeout(()=>{ deleteDrawer(retryCount+1); }, 1000);
+      return;
+    }
+    drawerBusy = false;
+    setDrawerButtonsDisabled(false);
     toast("Ошибка удаления: "+formatDbError(e));
   }
 }
