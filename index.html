@@ -652,6 +652,7 @@ let shipments = []; // строки таблицы shipments (видимость
 let shipmentsLoaded = false;
 let shipmentPeriodKey = null; // "YYYY-MM-DD|YYYY-MM-DD" выбранного периода, null = самый свежий
 let shipmentManagerFilter = "all";
+let shipmentDivisionFilter = "all"; // all | Стандарт | Нестандарт
 let shipmentSortCol = "order_sum"; // company | manager | division | order_count | order_sum
 let shipmentSortDir = "desc";
 const SORT_COLUMNS = [
@@ -1450,13 +1451,14 @@ function renderShipments(){
 
   const scoped = shipments.filter(s=> (s.period_from+"|"+s.period_to)===shipmentPeriodKey);
   const managersHere = Array.from(new Set(scoped.map(s=>s.manager).filter(Boolean))).sort();
-  const filtered = scoped.filter(s=> shipmentManagerFilter==="all" ? true : s.manager===shipmentManagerFilter);
+  const scopedByManager = scoped.filter(s=> shipmentManagerFilter==="all" ? true : s.manager===shipmentManagerFilter);
+  const filtered = scopedByManager.filter(s=> shipmentDivisionFilter==="all" ? true : s.division===shipmentDivisionFilter);
   filtered.sort((a,b)=> compareSortValues(shipmentSortValue(a,shipmentSortCol), shipmentSortValue(b,shipmentSortCol), shipmentSortDir));
 
   const totalCount = filtered.reduce((sum,s)=> sum+(s.order_count||0), 0);
   const totalSum = filtered.reduce((sum,s)=> sum+(s.order_sum||0), 0);
-  const nStandard = filtered.filter(s=>s.division==="Стандарт").length;
-  const nNonStandard = filtered.filter(s=>s.division==="Нестандарт").length;
+  const nStandard = scopedByManager.filter(s=>s.division==="Стандарт").length;
+  const nNonStandard = scopedByManager.filter(s=>s.division==="Нестандарт").length;
 
   const periodLabel = (p)=> fmtDate(p.from)+" — "+fmtDate(p.to);
 
@@ -1469,6 +1471,9 @@ function renderShipments(){
         <option value="all">Все менеджеры</option>
         ${managersHere.map(m=>`<option value="${esc(m)}" ${shipmentManagerFilter===m?"selected":""}>${esc(m)}</option>`).join("")}
       </select>` : ""}
+      <div class="chipgroup" id="shipDivChips">
+        ${["all","Стандарт","Нестандарт"].map(d=>`<button class="chip ${shipmentDivisionFilter===d?"active":""}" data-div="${esc(d)}">${d==="all"?"Все дивизионы":esc(d)}</button>`).join("")}
+      </div>
     </div>`;
 
   const statsHtml = `
@@ -1517,9 +1522,12 @@ function renderShipments(){
 
   main.innerHTML = toolbarHtml + statsHtml + tableHtml;
 
-  document.getElementById("fShipPeriod").onchange = (e)=>{ shipmentPeriodKey=e.target.value; shipmentManagerFilter="all"; renderShipments(); };
+  document.getElementById("fShipPeriod").onchange = (e)=>{ shipmentPeriodKey=e.target.value; shipmentManagerFilter="all"; shipmentDivisionFilter="all"; renderShipments(); };
   const mgrSel = document.getElementById("fShipManager");
   if (mgrSel) mgrSel.onchange = (e)=>{ shipmentManagerFilter=e.target.value; renderShipments(); };
+  document.querySelectorAll("#shipDivChips [data-div]").forEach(b=>{
+    b.onclick = ()=>{ shipmentDivisionFilter=b.getAttribute("data-div"); renderShipments(); };
+  });
   main.querySelectorAll("thead [data-sort]").forEach(th=>{
     th.onclick = ()=>{
       const col = th.getAttribute("data-sort");
