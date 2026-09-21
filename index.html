@@ -656,10 +656,11 @@ const SORT_COLUMNS = [
   {key:"status", label:"Статус"},
   {key:"segment", label:"Сегмент"},
   {key:"score", label:"Баллы"},
+  {key:"revenue", label:"Выручка 2025, ₽"},
   {key:"regDate", label:"Дата регистрации"},
   {key:"lastContact", label:"Посл. контакт"},
 ];
-const SORT_DEFAULT_DIR = {score:"desc", regDate:"desc", lastContact:"asc"};
+const SORT_DEFAULT_DIR = {score:"desc", revenue:"desc", regDate:"desc", lastContact:"asc"};
 function sortValue(c, col){
   const s = computeScores(c);
   switch(col){
@@ -672,6 +673,7 @@ function sortValue(c, col){
     case "status": return c.status || null;
     case "segment": return s.segment ? s.segment.code : null;
     case "score": return s.total;
+    case "revenue": return (c.revenue2025==null || c.revenue2025==="") ? null : Number(c.revenue2025);
     case "regDate": return c.registrationDate || null;
     case "lastContact": return c.lastContactDate || null;
     default: return null;
@@ -699,6 +701,7 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 function nowISO(){ return new Date().toISOString(); }
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
 function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return "—"; return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}); }
+function fmtMoney(v){ if(v==null || v==="" || isNaN(v)) return "—"; return Math.round(Number(v)).toLocaleString("ru-RU")+" ₽"; }
 function fmtDateTime(iso){ if(!iso) return "—"; const d=new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"})+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }
 function daysSince(iso){ if(!iso) return null; const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return null; const ms = new Date(todayISO()+"T00:00:00") - d; return Math.round(ms/86400000); }
 function noContactBadge(lastContactDateIso){
@@ -1108,6 +1111,7 @@ function renderList(){
       <td><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
       <td>${s.segment?`<span class="pill ${s.segment.style}">${s.segment.code}</span>`:'<span class="muted">—</span>'}</td>
       <td class="mono">${s.total}</td>
+      <td class="mono">${fmtMoney(c.revenue2025)}</td>
       <td class="muted">${fmtDate(c.registrationDate)}</td>
       <td class="muted">${noContactBadge(c.lastContactDate)}</td>
     </tr>`;
@@ -1942,7 +1946,7 @@ async function downloadKpiExcel(){
 async function downloadListExcel(rowsClients){
   const btn = document.getElementById("btnExportList");
 
-  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Регион","Контактное лицо","Телефон","Email","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
+  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -1957,6 +1961,7 @@ async function downloadListExcel(rowsClients){
       {val:c.status||""},
       {val:s.segment?s.segment.code:""},
       {val:s.total, type:"Number"},
+      {val: c.revenue2025!=null && c.revenue2025!=="" ? Number(c.revenue2025) : "", type: c.revenue2025!=null && c.revenue2025!=="" ? "Number" : "String"},
       {val:c.region||""},
       {val:c.contactPerson||""},
       {val:c.phone||""},
