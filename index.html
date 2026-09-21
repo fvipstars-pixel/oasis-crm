@@ -1424,6 +1424,17 @@ function findClientIdByCode(code){
   for (const [id,c] of clients.entries()){ if (c.code===code) return id; }
   return null;
 }
+// Дивизион/отрасль показываем ЖИВЫМИ из карточки клиента (а не тем, что было
+// на момент импорта отгрузок) — если менеджер поменял отрасль в карточке,
+// вкладка «Отгрузки» должна сразу отражать актуальный Стандарт/Нестандарт.
+function shipmentLiveInfo(s){
+  const clientId = findClientIdByCode(s.client_code);
+  if (clientId){
+    const c = clients.get(clientId);
+    return { clientId, industry: c.industry || null, division: computeScores(c).division };
+  }
+  return { clientId: null, industry: s.industry, division: s.division };
+}
 function shipmentSortValue(s, col){
   switch(col){
     case "company": return s.company || null;
@@ -1449,7 +1460,9 @@ function renderShipments(){
   }
   if (!shipmentPeriodKey || !periods.find(p=>p.key===shipmentPeriodKey)) shipmentPeriodKey = periods[0].key;
 
-  const scoped = shipments.filter(s=> (s.period_from+"|"+s.period_to)===shipmentPeriodKey);
+  const scoped = shipments
+    .filter(s=> (s.period_from+"|"+s.period_to)===shipmentPeriodKey)
+    .map(s=> Object.assign({}, s, shipmentLiveInfo(s)));
   const managersHere = Array.from(new Set(scoped.map(s=>s.manager).filter(Boolean))).sort();
   const scopedByManager = scoped.filter(s=> shipmentManagerFilter==="all" ? true : s.manager===shipmentManagerFilter);
   const filtered = scopedByManager.filter(s=> shipmentDivisionFilter==="all" ? true : s.division===shipmentDivisionFilter);
@@ -1493,7 +1506,7 @@ function renderShipments(){
     {key:"order_sum", label:"Сумма, ₽"},
   ];
   const rowsHtml = filtered.map(s=>{
-    const clientId = findClientIdByCode(s.client_code);
+    const clientId = s.clientId;
     return `<tr ${clientId?`data-id="${esc(clientId)}"`:`style="cursor:default;"`}>
       <td>
         <div class="company">${esc(s.company||"—")}${copyBtnHtml(s.company)}</div>
