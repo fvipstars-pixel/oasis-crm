@@ -647,6 +647,13 @@ const filters = { search:"", manager:"all", segment:"all", status:"all", regDate
 const kpiPeriod = { from:"", to:"" }; // период дашборда KPI — фильтр по дате регистрации
 let sortCol = "score"; // company | manager | industry | source | stage | status | segment | score | regDate
 let sortDir = "desc"; // asc | desc
+
+let shipments = []; // строки таблицы shipments (видимость уже отфильтрована RLS на стороне Supabase)
+let shipmentsLoaded = false;
+let shipmentPeriodKey = null; // "YYYY-MM-DD|YYYY-MM-DD" выбранного периода, null = самый свежий
+let shipmentManagerFilter = "all";
+let shipmentSortCol = "order_sum"; // company | manager | division | order_count | order_sum
+let shipmentSortDir = "desc";
 const SORT_COLUMNS = [
   {key:"company", label:"Компания"},
   {key:"manager", label:"Менеджер"},
@@ -942,6 +949,46 @@ async function initDb(){
     console.error("db error", err);
     renderCenterMessage("Ошибка синхронизации базы (" + (err&&err.message||"unknown") + "). Обновите страницу.");
   });
+  loadShipments();
+  ensureShipmentsRealtime();
+}
+
+let shipmentsChannel = null;
+async function loadShipments(){
+  try{
+    let from = 0;
+    const pageSize = 1000;
+    const all = [];
+    while(true){
+      const { data, error } = await supabase.from("shipments").select("*").range(from, from+pageSize-1);
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    shipments = all;
+    shipmentsLoaded = true;
+    if (view==="shipments") renderMain();
+  }catch(e){
+    console.error("shipments load error", e);
+    logEvent("shipments-error", "Не удалось загрузить отгрузки: "+(e&&e.message||"unknown"));
+  }
+}
+function ensureShipmentsRealtime(){
+  if (shipmentsChannel) return;
+  shipmentsChannel = supabase.channel("shipments-changes")
+    .on("postgres_changes", { event:"*", schema:"public", table:"shipments" }, ()=>{ loadShipments(); })
+    .subscribe(status=>{
+      if (status==="CHANNEL_ERROR" || status==="TIMED_OUT" || status==="CLOSED"){
+        const broken = shipmentsChannel;
+        shipmentsChannel = null;
+        try{
+          const p = supabase.removeChannel(broken);
+          if (p && typeof p.catch === "function") p.catch(()=>{});
+        }catch(e){}
+        setTimeout(ensureShipmentsRealtime, 3000);
+      }
+    });
 }
 
 function renderCenterMessage(msg){
@@ -999,6 +1046,7 @@ function renderNav(){
     {key:"all", label:"Все клиенты", count:nAll, view:"list"},
     {key:"transfer", label:"Передача в дивизион", count:nTransfer, view:"transfer"},
     {key:"transferred", label:"Переданные (комиссия)", count:nTransferred, view:"transferred"},
+    {key:"shipments", label:"Отгрузки", count:null, view:"shipments"},
     {key:"kpi", label:"Дашборд KPI", count:null, view:"kpi"},
   ];
   const nav = document.getElementById("navrow");
@@ -1040,6 +1088,7 @@ function renderMain(){
   if (view==="kpi") return renderKpi();
   if (view==="transfer") return renderTransfer();
   if (view==="transferred") return renderTransferred();
+  if (view==="shipments") return renderShipments();
   return renderList();
 }
 
@@ -1355,6 +1404,131 @@ function renderTransferred(){
 
   main.innerHTML = intro + block;
   main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = ()=>openDrawer(tr.getAttribute("data-id")));
+  wireCopyButtons(main);
+}
+
+/* =====================================================================
+   SHIPMENTS VIEW — отгрузки по клиентам за период (импортируются периодически)
+   ===================================================================== */
+function shipmentPeriods(){
+  const map = new Map(); // key -> {from,to}
+  shipments.forEach(s=>{
+    const key = s.period_from+"|"+s.period_to;
+    if (!map.has(key)) map.set(key, {key, from:s.period_from, to:s.period_to});
+  });
+  return Array.from(map.values()).sort((a,b)=> b.from.localeCompare(a.from));
+}
+function findClientIdByCode(code){
+  if (!code) return null;
+  for (const [id,c] of clients.entries()){ if (c.code===code) return id; }
+  return null;
+}
+function shipmentSortValue(s, col){
+  switch(col){
+    case "company": return s.company || null;
+    case "manager": return s.manager || null;
+    case "division": return s.division || null;
+    case "order_count": return s.order_count;
+    case "order_sum": return s.order_sum;
+    default: return null;
+  }
+}
+function renderShipments(){
+  const main = document.getElementById("main");
+
+  if (!shipmentsLoaded){
+    main.innerHTML = `<div class="empty">Загружаю отгрузки…</div>`;
+    return;
+  }
+
+  const periods = shipmentPeriods();
+  if (periods.length===0){
+    main.innerHTML = `<div class="empty">Пока нет ни одного импортированного периода отгрузок. Пришлите список Роману — он передаст мне, я подготовлю импорт.</div>`;
+    return;
+  }
+  if (!shipmentPeriodKey || !periods.find(p=>p.key===shipmentPeriodKey)) shipmentPeriodKey = periods[0].key;
+
+  const scoped = shipments.filter(s=> (s.period_from+"|"+s.period_to)===shipmentPeriodKey);
+  const managersHere = Array.from(new Set(scoped.map(s=>s.manager).filter(Boolean))).sort();
+  const filtered = scoped.filter(s=> shipmentManagerFilter==="all" ? true : s.manager===shipmentManagerFilter);
+  filtered.sort((a,b)=> compareSortValues(shipmentSortValue(a,shipmentSortCol), shipmentSortValue(b,shipmentSortCol), shipmentSortDir));
+
+  const totalCount = filtered.reduce((sum,s)=> sum+(s.order_count||0), 0);
+  const totalSum = filtered.reduce((sum,s)=> sum+(s.order_sum||0), 0);
+  const nStandard = filtered.filter(s=>s.division==="Стандарт").length;
+  const nNonStandard = filtered.filter(s=>s.division==="Нестандарт").length;
+
+  const periodLabel = (p)=> fmtDate(p.from)+" — "+fmtDate(p.to);
+
+  const toolbarHtml = `
+    <div class="toolbar">
+      <select id="fShipPeriod">
+        ${periods.map(p=>`<option value="${esc(p.key)}" ${shipmentPeriodKey===p.key?"selected":""}>${esc(periodLabel(p))}</option>`).join("")}
+      </select>
+      ${managersHere.length>1 ? `<select id="fShipManager">
+        <option value="all">Все менеджеры</option>
+        ${managersHere.map(m=>`<option value="${esc(m)}" ${shipmentManagerFilter===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>` : ""}
+    </div>`;
+
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat"><b>${filtered.length}</b><span>компаний</span></div>
+      <div class="stat"><b>${totalCount}</b><span>заказов</span></div>
+      <div class="stat"><b>${fmtMoney(totalSum)}</b><span>сумма отгрузок</span></div>
+      <div class="stat"><b>${nStandard}</b><span>Стандарт</span></div>
+      <div class="stat"><b>${nNonStandard}</b><span>Нестандарт</span></div>
+    </div>`;
+
+  const SHIP_COLUMNS = [
+    {key:"company", label:"Компания"},
+    {key:"manager", label:"Менеджер"},
+    {key:"division", label:"Дивизион"},
+    {key:"order_count", label:"Заказов"},
+    {key:"order_sum", label:"Сумма, ₽"},
+  ];
+  const rowsHtml = filtered.map(s=>{
+    const clientId = findClientIdByCode(s.client_code);
+    return `<tr ${clientId?`data-id="${esc(clientId)}"`:`style="cursor:default;"`}>
+      <td>
+        <div class="company">${esc(s.company||"—")}${copyBtnHtml(s.company)}</div>
+        <div class="code">${esc(s.client_code||"без кода")}${s.industry?` · ${esc(s.industry)}`:""}</div>
+      </td>
+      <td class="muted">${esc(s.manager||"—")}</td>
+      <td>${s.division ? `<span class="pill ${s.division==="Стандарт"?"info":"violet"}">${esc(s.division)}</span>` : `<span class="muted">—</span>`}</td>
+      <td class="mono">${s.order_count}</td>
+      <td class="mono">${fmtMoney(s.order_sum)}</td>
+    </tr>`;
+  }).join("");
+
+  const tableHtml = filtered.length===0 ? `<div class="empty">Нет данных за выбранный период.</div>` : `
+    <div class="tablewrap"><div class="tscroll">
+      <table>
+        <thead><tr>
+          ${SHIP_COLUMNS.map(col=>{
+            const active = shipmentSortCol===col.key;
+            const arrow = active ? (shipmentSortDir==="asc" ? " ▲" : " ▼") : "";
+            return `<th class="sortable${active?" sorted":""}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
+          }).join("")}
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div></div>`;
+
+  main.innerHTML = toolbarHtml + statsHtml + tableHtml;
+
+  document.getElementById("fShipPeriod").onchange = (e)=>{ shipmentPeriodKey=e.target.value; shipmentManagerFilter="all"; renderShipments(); };
+  const mgrSel = document.getElementById("fShipManager");
+  if (mgrSel) mgrSel.onchange = (e)=>{ shipmentManagerFilter=e.target.value; renderShipments(); };
+  main.querySelectorAll("thead [data-sort]").forEach(th=>{
+    th.onclick = ()=>{
+      const col = th.getAttribute("data-sort");
+      if (shipmentSortCol===col) shipmentSortDir = shipmentSortDir==="asc" ? "desc" : "asc";
+      else { shipmentSortCol = col; shipmentSortDir = (col==="company"||col==="manager"||col==="division") ? "asc" : "desc"; }
+      renderShipments();
+    };
+  });
+  main.querySelectorAll("tbody tr[data-id]").forEach(tr=> tr.onclick = ()=>openDrawer(tr.getAttribute("data-id")));
   wireCopyButtons(main);
 }
 
