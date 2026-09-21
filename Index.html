@@ -1,0 +1,2508 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+
+  :root{
+    --bg:#f5f4ef; --surface:#ffffff; --surface-2:#eeece3; --border:#dfdbcd;
+    --text:#211e17; --text-muted:#6d6a5c; --text-faint:#9c9788;
+    --accent:#2f6b5e; --accent-strong:#1e453b; --accent-weak:#e2eee9;
+    --good:#2c7a4b; --good-weak:#e2f2e6;
+    --warn:#a8721c; --warn-weak:#faf0da;
+    --bad:#ad3b34; --bad-weak:#fae6e3;
+    --info:#33628c; --info-weak:#e6eef5;
+    --violet:#6b4fa0; --violet-weak:#efeaf7;
+    --neutral:#8a8676; --neutral-weak:#ecebe2;
+    --shadow:0 8px 24px rgba(33,30,23,0.10), 0 1px 3px rgba(33,30,23,0.08);
+    --radius:12px; --radius-sm:8px;
+    --font-display:'Manrope',sans-serif; --font-body:'IBM Plex Sans',sans-serif; --font-mono:'IBM Plex Mono',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#17160f; --surface:#201e16; --surface-2:#2a281e; --border:#3a3728;
+      --text:#efece2; --text-muted:#a9a493; --text-faint:#79765f;
+      --accent:#5fa892; --accent-strong:#8fd0bb; --accent-weak:#213b34;
+      --good:#5fb27f; --good-weak:#1c3527;
+      --warn:#d8a44e; --warn-weak:#3a2f16;
+      --bad:#e08078; --bad-weak:#3b211e;
+      --info:#7ba7cf; --info-weak:#1f2f3d;
+      --violet:#b09ad8; --violet-weak:#2c2440;
+      --neutral:#a29d8a; --neutral-weak:#2c2a1f;
+      --shadow:0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17160f; --surface:#201e16; --surface-2:#2a281e; --border:#3a3728;
+    --text:#efece2; --text-muted:#a9a493; --text-faint:#79765f;
+    --accent:#5fa892; --accent-strong:#8fd0bb; --accent-weak:#213b34;
+    --good:#5fb27f; --good-weak:#1c3527;
+    --warn:#d8a44e; --warn-weak:#3a2f16;
+    --bad:#e08078; --bad-weak:#3b211e;
+    --info:#7ba7cf; --info-weak:#1f2f3d;
+    --violet:#b09ad8; --violet-weak:#2c2440;
+    --neutral:#a29d8a; --neutral-weak:#2c2a1f;
+    --shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body);
+    font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.disp{font-family:var(--font-display); text-wrap:balance;}
+  .mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  button,select,input,textarea{font:inherit; color:inherit;}
+  ::selection{background:var(--accent-weak);}
+
+  a{color:var(--accent-strong);}
+
+  /* ---------- layout shell ---------- */
+  #app{min-height:100%; display:flex; flex-direction:column;}
+
+  .topbar{
+    position:sticky; top:env(safe-area-inset-top,0px); z-index:20;
+    background:var(--surface); border-bottom:1px solid var(--border);
+    padding:14px clamp(16px,3vw,32px);
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:baseline; gap:10px; margin-right:auto;}
+  .brand .mark{
+    width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:800;font-size:15px;flex:none;
+  }
+  .brand h1{font-size:17px; font-weight:800; margin:0; letter-spacing:-0.01em;}
+  .brand .sub{font-size:12px; color:var(--text-muted);}
+
+  .whoami{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted);}
+  .whoami select{
+    padding:7px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-2); color:var(--text);
+  }
+
+  .navrow{
+    display:flex; gap:6px; padding:10px clamp(16px,3vw,32px) 0; flex-wrap:wrap;
+    background:var(--surface); border-bottom:1px solid var(--border);
+  }
+  .navbtn{
+    appearance:none; border:1px solid transparent; background:transparent; color:var(--text-muted);
+    padding:9px 14px; border-radius:var(--radius-sm) var(--radius-sm) 0 0; cursor:pointer; font-size:13.5px; font-weight:600;
+    border-bottom:2px solid transparent; transition:color .15s;
+  }
+  .navbtn:hover{color:var(--text);}
+  .navbtn.active{color:var(--accent-strong); border-bottom:2px solid var(--accent);}
+  .navbtn .count{color:var(--text-faint); font-weight:500; margin-left:4px;}
+  .navbtn.active .count{color:var(--accent-strong);}
+
+  main{flex:1; padding:20px clamp(16px,3vw,32px) 48px; display:flex; flex-direction:column; gap:16px; max-width:1400px; width:100%; margin:0 auto;}
+
+  /* ---------- summary strip ---------- */
+  .stats{display:flex; gap:10px; flex-wrap:wrap;}
+  .stat{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:9px 14px; display:flex; align-items:baseline; gap:8px; min-width:0;
+  }
+  .stat b{font-family:var(--font-display); font-size:17px;}
+  .stat span{font-size:12px; color:var(--text-muted);}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .toolbar input[type=text], .toolbar select{
+    padding:9px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13.5px;
+  }
+  .toolbar input[type=text]{min-width:220px; flex:1 1 220px;}
+  .chipgroup{display:flex; gap:6px; flex-wrap:wrap;}
+  .daterange{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .daterange input[type=date]{padding:9px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13.5px;}
+  .chip{
+    border:1px solid var(--border); background:var(--surface); padding:7px 12px; border-radius:999px; cursor:pointer;
+    font-size:12.5px; font-weight:600; color:var(--text-muted);
+  }
+  .chip.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn{
+    appearance:none; border:1px solid var(--accent); background:var(--accent); color:#fff; padding:10px 16px;
+    border-radius:var(--radius-sm); cursor:pointer; font-weight:700; font-size:13.5px; white-space:nowrap;
+  }
+  .btn:hover{background:var(--accent-strong); border-color:var(--accent-strong);}
+  .btn.ghost{background:transparent; color:var(--accent-strong);}
+  .btn.subtle{background:var(--surface-2); border-color:var(--border); color:var(--text);}
+  .btn.danger{background:var(--bad); border-color:var(--bad);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn.sm{padding:6px 11px; font-size:12.5px;}
+
+  /* ---------- table ---------- */
+  .tablewrap{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;}
+  .tscroll{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; min-width:920px;}
+  thead th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint);
+    padding:10px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; font-weight:600;
+  }
+  thead th.sortable{cursor:pointer; user-select:none;}
+  thead th.sortable:hover{color:var(--accent-strong);}
+  thead th.sortable.sorted{color:var(--accent-strong);}
+  tbody td{padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13.5px;}
+  tbody tr{cursor:pointer;}
+  tbody tr:hover td{background:var(--accent-weak);}
+  tbody tr:last-child td{border-bottom:none;}
+  .company{font-weight:600;}
+  .code{color:var(--text-faint); font-size:11.5px;}
+  .muted{color:var(--text-muted);}
+  .warnflag{color:var(--warn); font-size:11px; font-weight:700;}
+  .copybtn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; margin-left:4px; padding:0; border:none; border-radius:5px;
+    background:transparent; color:var(--text-faint); font-size:12px; line-height:1; cursor:pointer;
+    vertical-align:middle;
+  }
+  .copybtn:hover{background:var(--neutral-weak); color:var(--text);}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700;
+    white-space:nowrap;
+  }
+  .pill.good{background:var(--good-weak); color:var(--good);}
+  .pill.warn{background:var(--warn-weak); color:var(--warn);}
+  .pill.bad{background:var(--bad-weak); color:var(--bad);}
+  .pill.info{background:var(--info-weak); color:var(--info);}
+  .pill.violet{background:var(--violet-weak); color:var(--violet);}
+  .pill.neutral{background:var(--neutral-weak); color:var(--neutral);}
+
+  .loadmore{padding:14px; text-align:center;}
+  .empty{padding:48px 20px; text-align:center; color:var(--text-muted);}
+
+  /* ---------- kpi view ---------- */
+  .kpi-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px;}
+  .kpi-card h2{font-size:15px; margin:0 0 12px;}
+  table.kpi{width:100%; border-collapse:collapse; font-size:13px;}
+  table.kpi th, table.kpi td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:right;}
+  table.kpi th:first-child, table.kpi td:first-child{text-align:left; font-weight:600;}
+  table.kpi thead th{color:var(--text-faint); font-size:11px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
+  table.kpi tfoot td{font-weight:700; border-top:2px solid var(--border); border-bottom:none;}
+  .grouphead{background:var(--surface-2); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); font-weight:700;}
+
+  /* ---------- KPI charts ---------- */
+  .kpi-charts-grid{display:flex; gap:16px; flex-wrap:wrap; margin-top:16px;}
+  .chart-card{flex:1 1 360px; min-width:0; max-width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 14px 10px;}
+  .chart-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
+  .chart-card-head h3{margin:0; font-size:13px; font-weight:700; color:var(--text);}
+  .chart-card-wrap{position:relative;}
+  .kpi-chart-svg{width:100%; height:auto; display:block; overflow:visible;}
+  .kpi-bar-hit{cursor:pointer;}
+  .kpi-bar-g .kpi-bar-rect{transition:opacity .1s;}
+  .kpi-bar-g:hover .kpi-bar-rect, .kpi-bar-g:focus .kpi-bar-rect, .kpi-bar-g.hover .kpi-bar-rect{opacity:.75;}
+  .kpi-bar-g{outline:none;}
+  .kpi-bar-g:focus .kpi-bar-hit{outline:2px solid var(--accent); outline-offset:-2px;}
+  .kpi-tooltip{
+    position:fixed; z-index:70; pointer-events:none; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:7px 10px; font-size:12px; box-shadow:var(--shadow); opacity:0; transition:opacity .08s;
+    max-width:220px;
+  }
+  .kpi-tooltip.show{opacity:1;}
+  .kpi-tooltip .tt-label{color:var(--text-muted); margin-bottom:2px;}
+  .kpi-tooltip .tt-value{color:var(--text); font-weight:700;}
+  .chart-table-toggle{background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:11px; font-weight:600; padding:4px 9px; border-radius:999px; cursor:pointer;}
+  .chart-table-toggle:hover{color:var(--text); border-color:var(--text-faint);}
+  .chart-table{display:none; width:100%; max-width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font-size:12px; margin-top:8px;}
+  .chart-table.show{display:table;}
+  .chart-table.show + .chart-card-wrap{display:none;}
+  .chart-table th, .chart-table td{padding:6px 8px; border-bottom:1px solid var(--border); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chart-table th:first-child, .chart-table td:first-child{text-align:left; font-weight:600;}
+  .chart-table thead th{color:var(--text-faint); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
+  .chart-empty{font-size:12.5px; color:var(--text-faint); padding:20px 0; text-align:center;}
+
+  /* ---------- drawer ---------- */
+  .backdrop{
+    position:fixed; inset:0; background:rgba(20,18,12,0.4); backdrop-filter:blur(1px); z-index:40; opacity:0; pointer-events:none; transition:opacity .18s;
+  }
+  .backdrop.show{opacity:1; pointer-events:auto;}
+  .drawer{
+    position:fixed; top:0; right:0; height:100%; width:min(560px,100%); background:var(--surface); z-index:41;
+    box-shadow:var(--shadow); transform:translateX(100%); transition:transform .2s ease; display:flex; flex-direction:column;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .drawer.show{transform:translateX(0);}
+  .drawer-head{
+    padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:12px;
+  }
+  .drawer-head h2{margin:0; font-size:16px;}
+  .drawer-head .meta{font-size:12px; color:var(--text-muted); margin-top:2px;}
+  .drawer-body{flex:1; overflow-y:auto; padding:16px 20px 24px; display:flex; flex-direction:column; gap:22px;}
+  .drawer-foot{padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center;}
+
+  .section-title{
+    font-family:var(--font-display); font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent-strong);
+    font-weight:800; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .field-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
+  .field-grid .full{grid-column:1/-1;}
+  label.lbl{display:block; font-size:11.5px; color:var(--text-muted); margin-bottom:4px; font-weight:600;}
+  .field-grid input[type=text], .field-grid input[type=date], .field-grid input[type=number], .field-grid select, .field-grid textarea{
+    width:100%; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13.5px;
+  }
+  .field-grid textarea{resize:vertical; min-height:52px; font-family:inherit;}
+  .checkline{display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:6px 0;}
+  .checkline input{margin-top:3px; flex:none;}
+  .banner{
+    border-radius:var(--radius-sm); padding:10px 12px; font-size:13px; display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap;
+  }
+  .banner.warn{background:var(--warn-weak); color:var(--warn);}
+  .banner.good{background:var(--good-weak); color:var(--good);}
+  .scoreblock{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; display:flex; flex-direction:column; gap:10px;
+    transition:opacity .15s;
+  }
+  .scoreblock.disabled{opacity:.4; pointer-events:none;}
+  .scorerow{display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--text-muted);}
+  .scorerow b{color:var(--text); font-family:var(--font-mono); font-size:13px;}
+  .totalscore{
+    display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--border);
+  }
+  .totalscore .num{font-family:var(--font-display); font-size:28px; font-weight:800;}
+  .readonlybadges{display:flex; gap:8px; flex-wrap:wrap;}
+  .helptext{font-size:11.5px; color:var(--text-faint); margin-top:2px;}
+  details.legend{font-size:12.5px; color:var(--text-muted);}
+  details.legend summary{cursor:pointer; font-weight:600; color:var(--accent-strong);}
+  details.legend table{width:100%; margin-top:8px; border-collapse:collapse;}
+  details.legend td{padding:3px 6px; border-bottom:1px dashed var(--border);}
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg);
+    padding:10px 18px; border-radius:999px; font-size:13px; z-index:60; box-shadow:var(--shadow);
+  }
+
+  .center-msg{margin:60px auto; max-width:420px; text-align:center; color:var(--text-muted); font-size:13.5px;}
+
+  @media (max-width:640px){
+    .field-grid{grid-template-columns:1fr;}
+    table{min-width:760px;}
+  }
+
+  /* ---------- login screen ---------- */
+  .login-wrap{
+    min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .login-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:32px; width:100%; max-width:360px;
+  }
+  .login-card .mark{
+    width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:800;font-size:18px;margin-bottom:14px;
+  }
+  .login-card h1{font-size:18px; margin:0 0 4px;}
+  .login-card .sub{font-size:12.5px; color:var(--text-muted); margin-bottom:20px;}
+  .login-card label{display:block; font-size:12.5px; font-weight:600; color:var(--text-muted); margin:14px 0 6px;}
+  .login-card input{
+    width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text); font-size:14px;
+  }
+  .login-card button{
+    width:100%; margin-top:20px; padding:11px; border-radius:var(--radius-sm); border:none;
+    background:var(--accent); color:#fff; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .login-card button:disabled{opacity:.6; cursor:default;}
+  .login-error{color:var(--bad); font-size:12.5px; margin-top:12px; min-height:0;}
+  .whoami-name{font-weight:700; color:var(--text);}
+  .whoami-logout{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted);
+    padding:6px 11px; border-radius:999px; font-size:12px; cursor:pointer;
+  }
+
+  /* ---------- new-client tab-choice modal ---------- */
+  .tcm-backdrop{
+    position:fixed; inset:0; background:rgba(20,20,19,0.45); z-index:60;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .tcm-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px; width:100%; max-width:320px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .tcm-card h3{margin:0 0 4px; font-size:15.5px;}
+</style>
+
+<div class="login-wrap" id="loginScreen" hidden>
+  <div class="login-card">
+    <div class="mark">O</div>
+    <h1>Партнёры и скоринг</h1>
+    <div class="sub">Войдите под своим логином менеджера</div>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input id="loginEmail" type="email" autocomplete="username" required>
+      <label for="loginPassword">Пароль</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" required>
+      <button type="submit" id="loginBtn">Войти</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+    <button type="button" id="btnDownloadLogLogin" style="margin-top:14px;background:none;border:none;color:var(--text-faint);font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0;">Скачать лог событий браузера</button>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">O</div>
+      <div>
+        <h1>Партнёры и скоринг</h1>
+        <div class="sub">Отдел привлечения — воронка, квалификация, скоринг</div>
+      </div>
+    </div>
+    <div class="whoami">
+      Я: <span class="whoami-name" id="whoamiName">—</span>
+      <button type="button" class="whoami-logout" id="btnDownloadLog" title="Скачать лог событий этого браузера — приложите файл, если что-то работает не так">⬇ Лог</button>
+      <button type="button" class="whoami-logout" id="btnLogout">Выйти</button>
+    </div>
+  </div>
+
+  <div class="navrow" id="navrow"></div>
+
+  <main id="main">
+    <div class="center-msg">Загрузка…</div>
+  </main>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<div class="drawer" id="drawer"></div>
+<div id="toastHost"></div>
+
+<div class="tcm-backdrop" id="tcmBackdrop" hidden>
+  <div class="tcm-card">
+    <h3>Куда добавить нового клиента?</h3>
+    <button type="button" class="btn" id="tcmFlow">Входящий / исходящий</button>
+    <button type="button" class="btn subtle" id="tcmDormant">Спящий клиент</button>
+    <button type="button" class="btn subtle" id="tcmCancel">Отмена</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   SUPABASE CONFIG
+   ===================================================================== */
+const SUPABASE_URL = "https://wglvwfusdlonkfbchmpe.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_JOo52vl_iKr8hNlYaWhAqQ_Ixa1a-jh";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let CURRENT_USER = null; // { email, displayName, role }
+
+/* =====================================================================
+   ЛОГ СОБЫТИЙ ПРИЛОЖЕНИЯ — для быстрой диагностики ошибок.
+   Пишет breadcrumbs (навигация, сохранения, тосты) + все ошибки/исключения
+   в этом браузере. При проблеме пользователь жмёт "Скачать лог" в шапке
+   и присылает файл — там весь ход событий прямо перед сбоем.
+   ===================================================================== */
+const APP_LOG_KEY = "oasis_crm_log_v1";
+const APP_LOG_MAX = 600;
+let appLog = [];
+(function loadAppLog(){
+  try{
+    const raw = localStorage.getItem(APP_LOG_KEY);
+    if (raw) appLog = JSON.parse(raw).slice(-APP_LOG_MAX);
+  }catch(e){ appLog = []; }
+})();
+function saveAppLogToStorage(){
+  try{ localStorage.setItem(APP_LOG_KEY, JSON.stringify(appLog.slice(-APP_LOG_MAX))); }catch(e){ /* переполнено/недоступно — не критично */ }
+}
+function safeLogExtra(extra){
+  try{
+    if (extra instanceof Error) return { name: extra.name, message: extra.message, stack: extra.stack };
+    if (extra && typeof extra==="object" && ("message" in extra || "code" in extra || "details" in extra || "hint" in extra)){
+      // похоже на ошибку Supabase/Postgres — вытащим типичные поля явно
+      return { message: extra.message, code: extra.code, details: extra.details, hint: extra.hint };
+    }
+    return JSON.parse(JSON.stringify(extra));
+  }catch(e){ return String(extra); }
+}
+function logEvent(type, message, extra){
+  try{
+    const entry = {
+      t: new Date().toISOString(),
+      type: type,
+      user: (typeof CURRENT_USER!=="undefined" && CURRENT_USER) ? (CURRENT_USER.displayName+" <"+CURRENT_USER.email+">") : "—",
+      view: (typeof view!=="undefined") ? view : null,
+      message: (message==null? "" : String(message)),
+    };
+    if (extra!=null) entry.extra = safeLogExtra(extra);
+    appLog.push(entry);
+    if (appLog.length > APP_LOG_MAX) appLog = appLog.slice(-APP_LOG_MAX);
+    saveAppLogToStorage();
+  }catch(e){ /* логирование не должно ронять приложение */ }
+}
+window.addEventListener("error", function(e){
+  logEvent("js-error", e.message, { filename: e.filename, lineno: e.lineno, colno: e.colno, stack: e.error && e.error.stack });
+});
+window.addEventListener("unhandledrejection", function(e){
+  const reason = e.reason;
+  logEvent("unhandled-rejection", (reason && reason.message) ? reason.message : String(reason), reason);
+});
+(function wrapConsoleError(){
+  const orig = console.error.bind(console);
+  console.error = function(){
+    try{
+      const args = Array.prototype.slice.call(arguments);
+      const msg = args.map(a=> a instanceof Error ? a.message : (typeof a==="object" ? JSON.stringify(a) : String(a))).join(" ");
+      logEvent("console-error", msg, args.length===1 ? args[0] : args);
+    }catch(e){}
+    orig.apply(console, arguments);
+  };
+})();
+function downloadAppLog(){
+  const lines = [
+    "OASIS CRM — ЛОГ СОБЫТИЙ ПРИЛОЖЕНИЯ",
+    "Экспортирован: " + new Date().toLocaleString("ru-RU"),
+    "Пользователь: " + (CURRENT_USER ? (CURRENT_USER.displayName+" ("+CURRENT_USER.email+", роль: "+CURRENT_USER.role+")") : "не авторизован"),
+    "Текущий экран: " + (typeof view!=="undefined" ? view : "—"),
+    "Браузер: " + navigator.userAgent,
+    "Записей в логе: " + appLog.length,
+    "======================================================",
+    ""
+  ];
+  appLog.forEach(e=>{
+    let line = "["+e.t+"] ["+e.type+"] ("+e.user+") "+e.message;
+    if (e.extra!=null) line += "\n    " + JSON.stringify(e.extra);
+    lines.push(line);
+  });
+  const blob = new Blob([lines.join("\n")], {type:"text/plain;charset=utf-8"});
+  const fname = "oasis_crm_log_" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".txt";
+  saveBlobAsFile(fname, blob);
+  logEvent("export", "Лог событий скачан пользователем");
+  toast("Лог сохранён в файл");
+}
+function clearAppLog(){
+  if (!confirm("Очистить лог событий этого браузера?")) return;
+  appLog = [];
+  saveAppLogToStorage();
+  logEvent("log", "Лог очищен пользователем");
+  toast("Лог очищен");
+}
+
+/* =====================================================================
+   REFERENCE DATA — mirrors "Справочники" from Шаблон_воронка_скоринг.xlsx
+   ===================================================================== */
+const INDUSTRIES = [
+  ["РА полного цикла",15,"Стандарт"],
+  ["Производственная компания",15,"Нестандарт"],
+  ["Полиграфия",15,"Стандарт"],
+  ["Сувенирная компания",15,"Стандарт"],
+  ["Рекламные агентства",15,"Стандарт"],
+  ["Типография",5,"Стандарт"],
+  ["EVENT",5,"Нестандарт"],
+  ["BTL",5,"Нестандарт"],
+  ["Организация выставок и конференций",5,"Нестандарт"],
+  ["Выставочная компания",5,"Нестандарт"],
+  ["Наружная реклама",5,"Нестандарт"],
+  ["Интернет-магазин",5,"Нестандарт"],
+  ["Дизайн-студия",5,"Нестандарт"],
+  ["PR агентство",5,"Нестандарт"],
+  ["Издательство",5,"Нестандарт"],
+  ["Торговля",5,"Стандарт"],
+  ["Маркетинговое агентство",5,"Стандарт"],
+  ["Швейное производство",5,"Нестандарт"],
+  ["Магазин подарков и сувениров",5,"Стандарт"],
+  ["Аудит",5,"Стандарт"],
+  ["Государственная структура",5,"Стандарт"],
+  ["Консалтинг",5,"Стандарт"],
+  ["Канцелярия",5,"Стандарт"],
+  ["Оптовая подарочная компания",5,"Стандарт"],
+  ["Пищевая промышленность",5,"Стандарт"],
+  ["Подрядчик",5,"Стандарт"],
+  ["Спорт",5,"Стандарт"],
+  ["Туристическая компания",5,"Стандарт"],
+  ["Другое",5,"Стандарт"],
+  ["Не указано",0,"Стандарт"],
+  // добавлено по таблице Романа 16.09 — старые пункты выше не трогаем, эти дополняют список
+  ["РА с организацией поставок под заказ",15,"Стандарт"],
+  ["РА с узким производством сувениров",15,"Стандарт"],
+  ["Каталожная компания",5,"Стандарт"],
+  ["Продажа подарков",5,"Стандарт"],
+  ["Продажа канцелярской продукции",5,"Стандарт"],
+  ["Наружка",5,"Нестандарт"],
+  ["текстиль производство",5,"Нестандарт"],
+  ["интернет-магазин текстильных товаро",5,"Нестандарт"],
+  ["Швейное предприятие",5,"Нестандарт"],
+  ["Конечный заказчик",5,"Нестандарт"],
+];
+const INDUSTRY_MAP = new Map(INDUSTRIES.map(([n,p,d])=>[n,{points:p,division:d}]));
+
+const SIZES = [
+  ["Крупная — штат 20+ человек или есть своё производство/цех",15],
+  ["Средняя — штат 5–19 человек",8],
+  ["Микро / ИП — штат 1–4 человека",3],
+];
+const SIZE_MAP = new Map(SIZES);
+
+const VOLUMES = [
+  ["Высокий — от 3 млн ₽/год",25],
+  ["Средний — 1–3 млн ₽/год",15],
+  ["Низкий — до 1 млн ₽/год или закупают эпизодически",5],
+  ["Неизвестен — объём не выяснили",0],
+];
+const VOLUME_MAP = new Map(VOLUMES);
+
+
+const FLOW_HISTORY = [
+  ["Входящая заявка — < 2 месяцев с обращения",15],
+  ["Исходящий — менеджер нашёл и квалифицировал сам",15],
+  ["Входящая заявка — 2+ месяцев, контакта не было",8],
+];
+const FLOW_HISTORY_MAP = new Map(FLOW_HISTORY);
+
+const STAGES = [
+  "1. Квалификация","2. Первый контакт / Диагностика","3. Отправлено письмо","4. Написали в мессенджер",
+  "5. Позвали на вебинар","6. Позвали на мероприятие","7. Отправлено КП","8. Позвонили по резерву/заказу",
+  "9. Ждём решения","10. Пилот / оформление заказа","11. Перезвонить позже",
+];
+
+const STATUSES = ["Новый","В работе","Не дозвонился","Активен (сделал заказ)","Передан в дивизион","Отказ"];
+const STATUS_STYLE = {
+  "Новый":"neutral","В работе":"info","Не дозвонился":"warn",
+  "Активен (сделал заказ)":"good","Передан в дивизион":"violet","Отказ":"bad",
+};
+
+const REJECTION_REASONS = [
+  "Не подходит по отрасли / продукту","Работает с конкурентом","Не отвечает (3+ попытки)",
+  "Бюджет / цена не подходит","Не актуально сейчас (перезвон позже)","Дубль карточки / компании нет","Другое",
+];
+
+const DEFAULT_MANAGERS = ["Симонян Лусинэ","Фёдоров Роман"];
+
+/* =====================================================================
+   SCORING ENGINE — mirrors Методология_воронка_и_скоринг.docx
+   ===================================================================== */
+function monthsBetween(fromISO, toDate){
+  if(!fromISO) return null;
+  const from = new Date(fromISO+"T00:00:00");
+  if (isNaN(from.getTime())) return null;
+  let months = (toDate.getFullYear()-from.getFullYear())*12 + (toDate.getMonth()-from.getMonth());
+  if (toDate.getDate() < from.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+function addMonthsISO(fromISO, n){
+  if(!fromISO) return null;
+  const d = new Date(fromISO+"T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  const day = d.getDate();
+  d.setMonth(d.getMonth()+n);
+  if (d.getDate() !== day) d.setDate(0); // конец короче — откатываемся на последний день предыдущего месяца
+  return d.toISOString().slice(0,10);
+}
+function commissionInfo(c){
+  // Комиссия менеджеру: 3 месяца после передачи клиента в дивизион (только для статуса «Передан в дивизион»)
+  if (c.status!=="Передан в дивизион") return null;
+  if (!c.transferDate) return {transferDate:null, until:null, active:null};
+  const until = addMonthsISO(c.transferDate, 3);
+  const active = until >= todayISO();
+  return {transferDate:c.transferDate, until, active};
+}
+function commissionBannerHtml(draft){
+  const ci = commissionInfo(draft);
+  if (!ci) return "";
+  if (!ci.transferDate) return `<div class="banner warn" style="margin-top:10px;"><span>Статус «Передан в дивизион», но дата передачи не указана — комиссию менеджеру посчитать не получится.</span></div>`;
+  return `<div class="banner ${ci.active?"good":"warn"}" style="margin-top:10px;"><span>Комиссия менеджеру ${ci.active?"начисляется до":"начислялась до"} <b>${fmtDate(ci.until)}</b> (3 месяца с даты передачи ${fmtDate(ci.transferDate)})${ci.active?"":" — срок истёк"}.</span></div>`;
+}
+function dormantHistory(regISO){
+  const m = monthsBetween(regISO, new Date());
+  if (m===null) return {label:"дата регистрации не указана", points:0};
+  if (m<=2) return {label:"До 2 месяцев", points:20};
+  if (m<=6) return {label:"2-6 месяцев", points:12};
+  if (m<=24) return {label:"6-24 месяца", points:6};
+  return {label:"Больше 24 месяцев", points:2};
+}
+function computeScores(c){
+  const industry = INDUSTRY_MAP.get(c.industry) || {points:0, division:"Стандарт"};
+  const sizePts = SIZE_MAP.get(c.companySize) || 0;
+  const icp = industry.points + sizePts;
+  const volume = VOLUME_MAP.get(c.potentialVolume) || 0;
+  const eng = (c.engagement?.responded?10:0) + (c.engagement?.hadCall?10:0) + (c.engagement?.requestedKp?5:0);
+  let historyPts, historyLabel;
+  if (c.tab === "dormant"){
+    const h = dormantHistory(c.registrationDate);
+    historyPts = h.points; historyLabel = h.label;
+  } else {
+    historyPts = FLOW_HISTORY_MAP.get(c.flowHistory) || 0;
+    historyLabel = c.flowHistory || "не выбрано";
+  }
+  const total = icp+volume+eng+historyPts;
+  let segment;
+  if (total>=70) segment = {code:"A", label:"Приоритет", style:"good", desc:"Работать первым, лично, максимум внимания менеджера"};
+  else if (total>=40) segment = {code:"B", label:"В работе", style:"info", desc:"Штатная работа по плану, без спешки"};
+  else if (total>=20) segment = {code:"C", label:"Низкий приоритет", style:"warn", desc:"Автоматизированный прогрев (рассылка/чат-бот), без личных звонков"};
+  else segment = {code:"D", label:"Заморозка", style:"neutral", desc:"Не тратить время сейчас, вернуться через квартал/полгода"};
+  const division = industry.division;
+  const readyForTransfer = division==="Стандарт" && c.status==="Активен (сделал заказ)";
+  return {icp, volume, eng, historyPts, historyLabel, total, segment, division, readyForTransfer};
+}
+function isConverted(c){ return c.status==="Активен (сделал заказ)" || c.status==="Передан в дивизион"; }
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+let db = null;
+const clients = new Map(); // id -> data
+let unsub = null;
+let view = "list"; // list | kpi | transfer
+let tabFilter = "dormant"; // dormant | flow | all
+const filters = { search:"", manager:"all", segment:"all", status:"all", regDateFrom:"", regDateTo:"" };
+const kpiPeriod = { from:"", to:"" }; // период дашборда KPI — фильтр по дате регистрации
+let sortCol = "score"; // company | manager | industry | source | stage | status | segment | score | regDate
+let sortDir = "desc"; // asc | desc
+const SORT_COLUMNS = [
+  {key:"company", label:"Компания"},
+  {key:"manager", label:"Менеджер"},
+  {key:"industry", label:"Отрасль"},
+  {key:"region", label:"Регион"},
+  {key:"source", label:"Источник"},
+  {key:"stage", label:"Этап"},
+  {key:"status", label:"Статус"},
+  {key:"segment", label:"Сегмент"},
+  {key:"score", label:"Баллы"},
+  {key:"revenue", label:"Выручка 2025, ₽"},
+  {key:"regDate", label:"Дата регистрации"},
+  {key:"lastContact", label:"Посл. контакт"},
+];
+const SORT_DEFAULT_DIR = {score:"desc", revenue:"desc", regDate:"desc", lastContact:"asc"};
+function sortValue(c, col){
+  const s = computeScores(c);
+  switch(col){
+    case "company": return c.company || null;
+    case "manager": return c.manager || null;
+    case "industry": return c.industry || null;
+    case "region": return c.region || null;
+    case "source": return tabLabel(c) || null;
+    case "stage": return c.stage || null;
+    case "status": return c.status || null;
+    case "segment": return s.segment ? s.segment.code : null;
+    case "score": return s.total;
+    case "revenue": return (c.revenue2025==null || c.revenue2025==="") ? null : Number(c.revenue2025);
+    case "regDate": return c.registrationDate || null;
+    case "lastContact": return c.lastContactDate || null;
+    default: return null;
+  }
+}
+function compareSortValues(va, vb, dir){
+  const aEmpty = va===null || va===undefined || va==="";
+  const bEmpty = vb===null || vb===undefined || vb==="";
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1; // empty values always sort last
+  if (bEmpty) return -1;
+  let cmp;
+  if (typeof va==="number" && typeof vb==="number") cmp = va-vb;
+  else cmp = String(va).localeCompare(String(vb), "ru");
+  return cmp * (dir==="asc" ? 1 : -1);
+}
+let visibleLimit = 80;
+let drawerState = null; // {id, isNew, draft}
+let drawerBusy = false; // защита от повторной отправки (двойной клик/дребезг мыши, гонки сети)
+const transferSelected = new Set(); // id-ы, отмеченные для массовой передачи в дивизион
+let bulkTransferDate = todayISO();
+
+function uid(){ return "m"+Math.random().toString(36).slice(2,9); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowISO(){ return new Date().toISOString(); }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return "—"; return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}); }
+function fmtMoney(v){ if(v==null || v==="" || isNaN(v)) return "—"; return Math.round(Number(v)).toLocaleString("ru-RU")+" ₽"; }
+function fmtDateTime(iso){ if(!iso) return "—"; const d=new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"})+" "+d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }
+function daysSince(iso){ if(!iso) return null; const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return null; const ms = new Date(todayISO()+"T00:00:00") - d; return Math.round(ms/86400000); }
+function noContactBadge(lastContactDateIso){
+  const days = daysSince(lastContactDateIso);
+  if (days==null) return `<span class="pill warn">не было контакта</span>`;
+  let style, label;
+  if (days>=150){ style="bad"; label="150+ дней"; }
+  else if (days>=100){ style="bad"; label="100+ дней"; }
+  else if (days>=30){ style="warn"; label="30+ дней"; }
+  else if (days>=5){ style="info"; label=days+" дн."; }
+  else { style="good"; label = days<=0 ? "сегодня" : days+" дн."; }
+  return `<span>${fmtDate(lastContactDateIso)}</span> <span class="pill ${style}">${label}</span>`;
+}
+
+function getManagers(){
+  const set = new Set(DEFAULT_MANAGERS);
+  clients.forEach(c=>{ if(c.manager) set.add(c.manager); });
+  return Array.from(set).sort();
+}
+function currentManager(){
+  return CURRENT_USER ? CURRENT_USER.displayName : "";
+}
+
+function toast(msg){
+  const host = document.getElementById("toastHost");
+  const t = document.createElement("div");
+  t.className="toast"; t.textContent=msg;
+  host.appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+  logEvent("toast", msg);
+}
+
+/* =====================================================================
+   DUPLICATE DETECTION — предупреждение при похожем клиенте
+   ===================================================================== */
+function asStr(s){
+  // защита от нестроковых значений в старых/импортированных данных
+  // (например, телефон, попавший в базу как число, а не строка)
+  return (s==null) ? "" : String(s);
+}
+function normCompanyName(s){
+  return asStr(s).toLowerCase()
+    .replace(/[«»"'.,()]/g, "")
+    .replace(/\b(ооо|зао|оао|пао|нко|ип)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function normPhoneDigits(s){
+  const digits = asStr(s).replace(/\D/g, "");
+  return digits ? digits.slice(-10) : "";
+}
+function normEmailStr(s){
+  return asStr(s).trim().toLowerCase();
+}
+function findPossibleDuplicates(draft, excludeId){
+  const company = normCompanyName(draft.company);
+  const phone = normPhoneDigits(draft.phone);
+  const email = normEmailStr(draft.email);
+  const matches = [];
+  clients.forEach((c, id)=>{
+    if (id===excludeId) return;
+    let reason = null;
+    if (company && normCompanyName(c.company)===company) reason = "по названию компании";
+    else if (phone && normPhoneDigits(c.phone)===phone) reason = "по телефону";
+    else if (email && normEmailStr(c.email)===email) reason = "по email";
+    if (reason) matches.push({ id, c, reason });
+  });
+  return matches;
+}
+function showConfirmModal({ title, bodyHtml, confirmLabel="Всё равно сохранить", cancelLabel="Отмена" }){
+  return new Promise(resolve=>{
+    const backdrop = document.createElement("div");
+    backdrop.className = "tcm-backdrop";
+    backdrop.innerHTML = `
+      <div class="tcm-card">
+        <h3>${esc(title)}</h3>
+        ${bodyHtml}
+        <button type="button" class="btn" id="cmOk">${esc(confirmLabel)}</button>
+        <button type="button" class="btn subtle" id="cmCancel">${esc(cancelLabel)}</button>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const cleanup = (result)=>{ backdrop.remove(); resolve(result); };
+    backdrop.querySelector("#cmOk").onclick = ()=>cleanup(true);
+    backdrop.querySelector("#cmCancel").onclick = ()=>cleanup(false);
+    backdrop.onclick = (e)=>{ if (e.target===backdrop) cleanup(false); };
+  });
+}
+
+async function copyToClipboard(text){
+  if (!text){ return; }
+  try{
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    toast("Скопировано: "+text);
+  }catch(e){
+    toast("Не удалось скопировать");
+  }
+}
+function copyBtnHtml(text){
+  if (!text) return "";
+  return `<button type="button" class="copybtn" data-copy="${esc(text)}" title="Скопировать название">⧉</button>`;
+}
+function wireCopyButtons(root){
+  root.querySelectorAll(".copybtn").forEach(b=>{
+    b.onclick = (e)=>{ e.stopPropagation(); copyToClipboard(b.getAttribute("data-copy")); };
+  });
+}
+
+/* =====================================================================
+   DB — тонкая обёртка над Supabase, повторяющая интерфейс db.collection/doc
+   ===================================================================== */
+function makeSupabaseDb(){
+  let cache = new Map();
+  let listeners = new Set();
+  let channel = null;
+  let loaded = false;
+
+  function snapshotFromCache(){
+    return { docs: Array.from(cache.entries()).map(([id,data])=>({ id, exists:true, data:()=>data })) };
+  }
+  function notify(){
+    const snap = snapshotFromCache();
+    listeners.forEach(cb=>{ try{ cb(snap); }catch(e){ console.error(e); } });
+  }
+  async function loadAll(){
+    let from = 0;
+    const pageSize = 1000;
+    const next = new Map();
+    while(true){
+      const { data, error } = await supabase.from("clients").select("id,data").range(from, from+pageSize-1);
+      if (error) throw error;
+      data.forEach(r=> next.set(r.id, r.data));
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    cache = next;
+    loaded = true;
+  }
+  function ensureRealtime(){
+    if (channel) return;
+    channel = supabase.channel("clients-changes")
+      .on("postgres_changes", { event:"*", schema:"public", table:"clients" }, payload=>{
+        if (payload.eventType === "DELETE"){
+          if (payload.old && payload.old.id) cache.delete(payload.old.id);
+        } else if (payload.new){
+          cache.set(payload.new.id, payload.new.data);
+        }
+        notify();
+      })
+      .subscribe(status=>{
+        if (status==="CHANNEL_ERROR" || status==="TIMED_OUT" || status==="CLOSED"){
+          logEvent("realtime", "Статус канала обновлений: "+status+" — переподключение через 3с");
+          const broken = channel;
+          channel = null;
+          try{
+            // removeChannel() зовёт unsubscribe(), который возвращает Promise —
+            // в момент обрыва канал уже в процессе внутренней очистки, и эта
+            // проверка иногда отклоняется асинхронно. Гасим и синхронный throw,
+            // и асинхронный reject, чтобы это не улетало в unhandledrejection.
+            const p = supabase.removeChannel(broken);
+            if (p && typeof p.catch === "function") p.catch(()=>{});
+          }catch(e){}
+          setTimeout(ensureRealtime, 3000);
+        } else if (status==="SUBSCRIBED"){
+          logEvent("realtime", "Канал обновлений подключён");
+        }
+      });
+  }
+  return {
+    collection(name){
+      return {
+        onSnapshot(cb, errCb){
+          listeners.add(cb);
+          (loaded ? Promise.resolve() : loadAll()).then(()=>{
+            ensureRealtime();
+            notify();
+          }).catch(e=>{ if (errCb) errCb(e); else console.error(e); });
+          return ()=>{ listeners.delete(cb); };
+        },
+        async add(data){
+          const id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("id-"+Date.now()+"-"+Math.random().toString(36).slice(2));
+          const { error } = await supabase.from("clients").insert({ id, data });
+          if (error) throw error;
+          // обновляем локальный кэш сразу — не полагаемся только на realtime-канал
+          // (если он в этот момент разорван, интерфейс всё равно должен обновиться)
+          cache.set(id, data);
+          notify();
+          return { id };
+        },
+      };
+    },
+    doc(path){
+      const id = path.split("/")[1];
+      return {
+        async update(patch){
+          const current = cache.get(id) || {};
+          const merged = Object.assign({}, current, patch);
+          const { error } = await supabase.from("clients").update({ data: merged }).eq("id", id);
+          if (error) throw error;
+          cache.set(id, merged);
+          notify();
+        },
+        async set(data){
+          const { error } = await supabase.from("clients").upsert({ id, data });
+          if (error) throw error;
+          cache.set(id, data);
+          notify();
+        },
+        async delete(){
+          const { error } = await supabase.from("clients").delete().eq("id", id);
+          if (error) throw error;
+          cache.delete(id);
+          notify();
+        },
+      };
+    },
+  };
+}
+
+async function initDb(){
+  db = makeSupabaseDb();
+  unsub = db.collection("clients").onSnapshot(snap=>{
+    clients.clear();
+    snap.docs.forEach(d=>{ if(d.exists) clients.set(d.id, d.data()); });
+    renderShell();
+  }, err=>{
+    console.error("db error", err);
+    renderCenterMessage("Ошибка синхронизации базы (" + (err&&err.message||"unknown") + "). Обновите страницу.");
+  });
+}
+
+function renderCenterMessage(msg){
+  document.getElementById("main").innerHTML = '<div class="center-msg">'+esc(msg)+'</div>';
+}
+
+/* =====================================================================
+   DERIVED HELPERS
+   ===================================================================== */
+function codeCounts(){
+  const m = new Map();
+  clients.forEach(c=>{ if(c.code){ m.set(c.code,(m.get(c.code)||0)+1); } });
+  return m;
+}
+function tabLabel(c){
+  if (c.tab==="dormant") return "Спящий";
+  if (c.source==="incoming") return "Входящая заявка";
+  if (c.source==="outgoing") return "Исходящий";
+  return "Входящие/исходящие";
+}
+function matchesFilters(c){
+  if (tabFilter!=="all" && c.tab!==tabFilter) return false;
+  if (filters.manager!=="all" && c.manager!==filters.manager) return false;
+  if (filters.status!=="all" && c.status!==filters.status) return false;
+  if (filters.segment!=="all"){
+    const s = computeScores(c);
+    if (!s.segment || s.segment.code!==filters.segment) return false;
+  }
+  if (filters.search){
+    const q = filters.search.toLowerCase();
+    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  if (filters.regDateFrom || filters.regDateTo){
+    if (!c.registrationDate) return false;
+    if (filters.regDateFrom && c.registrationDate < filters.regDateFrom) return false;
+    if (filters.regDateTo && c.registrationDate > filters.regDateTo) return false;
+  }
+  return true;
+}
+
+/* =====================================================================
+   NAV
+   ===================================================================== */
+function renderNav(){
+  const all = Array.from(clients.values());
+  const nDormant = all.filter(c=>c.tab==="dormant").length;
+  const nFlow = all.filter(c=>c.tab==="flow").length;
+  const nAll = all.length;
+  const nTransfer = all.filter(c=>computeScores(c).readyForTransfer).length;
+  const nTransferred = all.filter(c=>c.status==="Передан в дивизион").length;
+  const tabs = [
+    {key:"dormant", label:"Спящие клиенты", count:nDormant, view:"list"},
+    {key:"flow", label:"Входящие и исходящие", count:nFlow, view:"list"},
+    {key:"all", label:"Все клиенты", count:nAll, view:"list"},
+    {key:"transfer", label:"Передача в дивизион", count:nTransfer, view:"transfer"},
+    {key:"transferred", label:"Переданные (комиссия)", count:nTransferred, view:"transferred"},
+    {key:"kpi", label:"Дашборд KPI", count:null, view:"kpi"},
+  ];
+  const nav = document.getElementById("navrow");
+  nav.innerHTML = tabs.map(t=>{
+    const active = (t.view==="list" && view==="list" && tabFilter===t.key) || (t.view!=="list" && view===t.view);
+    return '<button class="navbtn'+(active?" active":"")+'" data-nav="'+t.key+'">'+esc(t.label)+
+      (t.count!=null?' <span class="count">'+t.count+'</span>':'')+'</button>';
+  }).join("");
+  nav.querySelectorAll("[data-nav]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const key = btn.getAttribute("data-nav");
+      const t = tabs.find(x=>x.key===key);
+      logEvent("nav", "Переход на вкладку: "+t.label);
+      view = t.view;
+      if (t.view==="list") tabFilter = key;
+      visibleLimit = 80;
+      renderMain();
+      renderNav();
+    });
+  });
+}
+
+/* =====================================================================
+   MAIN RENDER DISPATCH
+   ===================================================================== */
+function renderShell(){
+  renderWhoAmI();
+  renderNav();
+  renderMain();
+}
+function renderWhoAmI(){
+  const el = document.getElementById("whoamiName");
+  if (el && CURRENT_USER){
+    el.textContent = CURRENT_USER.displayName + (CURRENT_USER.role==="admin" ? " (админ, видит всех)" : "");
+  }
+}
+
+function renderMain(){
+  if (view==="kpi") return renderKpi();
+  if (view==="transfer") return renderTransfer();
+  if (view==="transferred") return renderTransferred();
+  return renderList();
+}
+
+/* =====================================================================
+   LIST VIEW
+   ===================================================================== */
+function renderList(){
+  const main = document.getElementById("main");
+  const focusInfo = (()=>{
+    const el = document.activeElement;
+    if (el && el.id && main.contains(el)){
+      return { id: el.id, start: el.selectionStart, end: el.selectionEnd };
+    }
+    return null;
+  })();
+  const scoped = Array.from(clients.entries()).filter(([id,c])=> tabFilter==="all" ? true : c.tab===tabFilter);
+  const counts = { total:scoped.length };
+  STATUSES.forEach(s=> counts[s] = scoped.filter(([,c])=>c.status===s).length );
+
+  const filtered = scoped.filter(([,c])=>matchesFilters(c));
+  filtered.sort((a,b)=> compareSortValues(sortValue(a[1],sortCol), sortValue(b[1],sortCol), sortDir));
+  const dupes = codeCounts();
+  const managers = getManagers();
+
+  const toolbarHtml = `
+    <div class="toolbar">
+      <input type="text" id="fSearch" placeholder="Поиск: компания, код, контакт, регион, email, менеджер…" value="${esc(filters.search)}"/>
+      <select id="fManager">
+        <option value="all">Все менеджеры</option>
+        ${managers.map(m=>`<option value="${esc(m)}" ${filters.manager===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>
+      <select id="fStatus">
+        <option value="all">Любой статус</option>
+        ${STATUSES.map(s=>`<option value="${esc(s)}" ${filters.status===s?"selected":""}>${esc(s)}</option>`).join("")}
+      </select>
+      <div class="chipgroup" id="segChips">
+        ${["all","A","B","C","D"].map(s=>`<button class="chip ${filters.segment===s?"active":""}" data-seg="${s}">${s==="all"?"Все сегменты":s}</button>`).join("")}
+      </div>
+      <div class="daterange">
+        <span class="helptext" style="white-space:nowrap;">Дата регистрации:</span>
+        <input type="date" id="fRegFrom" value="${esc(filters.regDateFrom)}"/>
+        <span class="helptext">—</span>
+        <input type="date" id="fRegTo" value="${esc(filters.regDateTo)}"/>
+        ${(filters.regDateFrom||filters.regDateTo) ? `<button class="btn subtle sm" id="btnRegClear">Сбросить</button>` : ""}
+      </div>
+      <button class="btn subtle" id="btnExportList">⬇ Excel (текущий список)</button>
+      <button class="btn" id="btnNew">+ Новый клиент</button>
+    </div>`;
+
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat"><b>${counts.total}</b><span>всего</span></div>
+      ${STATUSES.map(s=>`<div class="stat"><b>${counts[s]||0}</b><span>${esc(s)}</span></div>`).join("")}
+    </div>`;
+
+  const rows = filtered.slice(0, visibleLimit);
+  const rowsHtml = rows.map(([id,c])=>{
+    const s = computeScores(c);
+    const dup = c.code && dupes.get(c.code) > 1;
+    return `<tr data-id="${esc(id)}">
+      <td>
+        <div class="company">${esc(c.company||"(без названия)")}${copyBtnHtml(c.company)}</div>
+        <div class="code">${esc(c.code||"без кода")}${dup?' <span class="warnflag">⚠ дублируется</span>':''}</div>
+      </td>
+      <td class="muted">${esc(c.manager||"—")}</td>
+      <td class="muted">${esc(c.industry||"—")}</td>
+      <td class="muted">${esc(c.region||"—")}</td>
+      <td class="muted">${esc(tabLabel(c))}</td>
+      <td class="muted">${esc(c.stage||"—")}</td>
+      <td><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
+      <td>${s.segment?`<span class="pill ${s.segment.style}">${s.segment.code}</span>`:'<span class="muted">—</span>'}</td>
+      <td class="mono">${s.total}</td>
+      <td class="mono">${fmtMoney(c.revenue2025)}</td>
+      <td class="muted">${fmtDate(c.registrationDate)}</td>
+      <td class="muted">${noContactBadge(c.lastContactDate)}</td>
+    </tr>`;
+  }).join("");
+
+  const tableHtml = filtered.length===0 ? `<div class="empty">Ничего не найдено по текущим фильтрам.</div>` : `
+    <div class="tablewrap">
+      <div class="tscroll">
+      <table>
+        <thead><tr>
+          ${SORT_COLUMNS.map(col=>{
+            const active = sortCol===col.key;
+            const arrow = active ? (sortDir==="asc" ? " ▲" : " ▼") : "";
+            return `<th class="sortable${active?" sorted":""}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
+          }).join("")}
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      </div>
+      ${filtered.length>visibleLimit ? `<div class="loadmore"><button class="btn subtle sm" id="btnMore">Показать ещё (${filtered.length-visibleLimit})</button></div>` : ""}
+    </div>`;
+
+  main.innerHTML = toolbarHtml + statsHtml + tableHtml;
+
+  document.getElementById("fSearch").oninput = (e)=>{ filters.search=e.target.value; visibleLimit=80; renderList(); };
+  document.getElementById("fManager").onchange = (e)=>{ filters.manager=e.target.value; renderList(); };
+  document.getElementById("fStatus").onchange = (e)=>{ filters.status=e.target.value; renderList(); };
+  document.getElementById("fRegFrom").onchange = (e)=>{ filters.regDateFrom=e.target.value; renderList(); };
+  document.getElementById("fRegTo").onchange = (e)=>{ filters.regDateTo=e.target.value; renderList(); };
+  const regClearBtn = document.getElementById("btnRegClear");
+  if (regClearBtn) regClearBtn.onclick = ()=>{ filters.regDateFrom=""; filters.regDateTo=""; renderList(); };
+  document.getElementById("btnNew").onclick = ()=> openNewClientFlow();
+  document.getElementById("btnExportList").onclick = ()=> downloadListExcel(filtered.map(([,c])=>c));
+  main.querySelectorAll("thead [data-sort]").forEach(th=>{
+    th.onclick = ()=>{
+      const col = th.getAttribute("data-sort");
+      if (sortCol===col) sortDir = sortDir==="asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = SORT_DEFAULT_DIR[col] || "asc"; }
+      renderList();
+    };
+  });
+  document.querySelectorAll("#segChips [data-seg]").forEach(b=>{
+    b.onclick = ()=>{ filters.segment=b.getAttribute("data-seg"); renderList(); };
+  });
+  const more = document.getElementById("btnMore");
+  if (more) more.onclick = ()=>{ visibleLimit+=120; renderList(); };
+  main.querySelectorAll("tbody tr").forEach(tr=>{
+    tr.onclick = ()=> openDrawer(tr.getAttribute("data-id"));
+  });
+  wireCopyButtons(main);
+
+  if (focusInfo){
+    const el = document.getElementById(focusInfo.id);
+    if (el){
+      el.focus();
+      if (typeof el.setSelectionRange === "function" && focusInfo.start!=null){
+        try{ el.setSelectionRange(focusInfo.start, focusInfo.end); }catch(e){}
+      }
+    }
+  }
+}
+
+function openNewClientFlow(){
+  // Всегда явно спрашиваем, в какую вкладку добавить — независимо от того,
+  // какая вкладка сейчас открыта у менеджера.
+  const backdropEl = document.getElementById("tcmBackdrop");
+  backdropEl.hidden = false;
+  const close = ()=>{ backdropEl.hidden = true; };
+  document.getElementById("tcmFlow").onclick = ()=>{ close(); openDrawer(null, "flow"); };
+  document.getElementById("tcmDormant").onclick = ()=>{ close(); openDrawer(null, "dormant"); };
+  document.getElementById("tcmCancel").onclick = close;
+  backdropEl.onclick = (e)=>{ if (e.target===backdropEl) close(); };
+}
+
+/* =====================================================================
+   TRANSFER QUEUE VIEW
+   ===================================================================== */
+function renderTransfer(){
+  const main = document.getElementById("main");
+  const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
+  ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
+
+  const readyIds = new Set(ready.map(([id])=>id));
+  Array.from(transferSelected).forEach(id=>{ if (!readyIds.has(id)) transferSelected.delete(id); });
+
+  const intro = `<div class="banner good" style="align-items:flex-start;">
+    <div>
+      <b>Готовы к передаче в Дивизион 2:</b> отрасль = «Стандарт» и статус = «Активен (сделал заказ)».
+      Раз в месяц соберите этот список и распределите клиентов между менеджерами по развитию —
+      предварительно заполнив контактное лицо, договорённости и открытые вопросы в карточке клиента.
+      Можно перевести сразу несколько: отметьте нужных галочками и нажмите «Перевести выбранных» —
+      статус и дата передачи проставятся всем разом (от неё считаем 3 месяца, пока менеджеру ещё идёт процент).
+    </div>
+  </div>`;
+
+  const bulkBarHtml = ready.length===0 ? "" : `
+    <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;">
+      <label class="checkline" style="margin:0;"><input type="checkbox" id="chkSelectAllTransfer" ${ready.length>0 && transferSelected.size===ready.length?"checked":""}/> Выбрать все (${ready.length})</label>
+      <span class="helptext">Выбрано: <b>${transferSelected.size}</b></span>
+      <label class="lbl" style="margin:0;">Дата передачи</label>
+      <input type="date" id="bulkTransferDate" value="${esc(bulkTransferDate)}"/>
+      <button class="btn" id="btnBulkTransfer" ${transferSelected.size===0?"disabled":""}>Перевести выбранных в дивизион</button>
+    </div>`;
+
+  const readyBlock = ready.length===0 ? `<div class="empty">Пока нет клиентов, готовых к передаче.</div>` : (()=>{
+    const rows = ready.map(([id,c])=>{
+      const h = c.handover||{};
+      const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
+      return `<tr data-id="${esc(id)}">
+        <td><input type="checkbox" class="chkTransfer" data-id="${esc(id)}" ${transferSelected.has(id)?"checked":""}/></td>
+        <td><div class="company">${esc(c.company)}${copyBtnHtml(c.company)}</div><div class="code">${esc(c.code||"")}</div></td>
+        <td class="muted">${esc(c.manager||"—")}</td>
+        <td class="muted">${esc(c.industry||"—")}</td>
+        <td class="muted">${esc(c.region||"—")}</td>
+        <td class="muted">${fmtDate(c.registrationDate)}</td>
+        <td class="muted">${esc(c.contactPerson||"—")}</td>
+        <td class="muted">${esc(c.phone||"—")}</td>
+        <td class="muted">${esc(c.email||"—")}</td>
+        <td class="muted">${esc(c.nextStep||"—")}</td>
+        <td class="muted">${noContactBadge(c.lastContactDate)}</td>
+        <td>${filled?'<span class="pill good">заполнено</span>':'<span class="pill warn">нужно заполнить</span>'}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="tablewrap"><div class="tscroll">
+      <table>
+        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
+  })();
+
+  main.innerHTML = intro + bulkBarHtml + readyBlock;
+
+  main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = (e)=>{
+    if (e.target.closest(".chkTransfer")) return;
+    openDrawer(tr.getAttribute("data-id"));
+  });
+  main.querySelectorAll(".chkTransfer").forEach(chk=>{
+    chk.onclick = (e)=> e.stopPropagation();
+    chk.onchange = ()=>{
+      const id = chk.getAttribute("data-id");
+      if (chk.checked) transferSelected.add(id); else transferSelected.delete(id);
+      renderTransfer();
+    };
+  });
+  const selectAll = document.getElementById("chkSelectAllTransfer");
+  if (selectAll) selectAll.onclick = (e)=> e.stopPropagation();
+  if (selectAll) selectAll.onchange = ()=>{
+    if (selectAll.checked) ready.forEach(([id])=>transferSelected.add(id));
+    else transferSelected.clear();
+    renderTransfer();
+  };
+  const bulkDateInput = document.getElementById("bulkTransferDate");
+  if (bulkDateInput) bulkDateInput.onchange = (e)=>{ bulkTransferDate = e.target.value || todayISO(); };
+  wireCopyButtons(main);
+  const btnBulk = document.getElementById("btnBulkTransfer");
+  if (btnBulk) btnBulk.onclick = ()=> bulkTransferSelected();
+}
+
+async function bulkTransferSelected(){
+  if (!db){ toast("База данных недоступна"); return; }
+  const ids = Array.from(transferSelected);
+  if (ids.length===0) return;
+  const dateVal = bulkTransferDate || todayISO();
+  const manager = currentManager() || "";
+  const btn = document.getElementById("btnBulkTransfer");
+  if (btn){ btn.disabled = true; btn.textContent = "Переводим…"; }
+  let okCount = 0, failCount = 0;
+  await Promise.all(ids.map(async (id)=>{
+    try{
+      const c = clients.get(id);
+      if (!c) return;
+      const history = Array.isArray(c.statusHistory) ? c.statusHistory.slice() : [];
+      history.push({status:"Передан в дивизион", at: nowISO(), by: manager});
+      await db.doc("clients/"+id).update({
+        status: "Передан в дивизион",
+        transferDate: dateVal,
+        statusHistory: history,
+        updatedAt: nowISO(),
+        updatedBy: manager,
+      });
+      okCount++;
+    }catch(e){
+      console.error(e);
+      failCount++;
+    }
+  }));
+  transferSelected.clear();
+  toast(failCount===0 ? `Передано в дивизион: ${okCount}` : `Передано: ${okCount}, ошибок: ${failCount}`);
+  renderTransfer();
+}
+
+/* =====================================================================
+   TRANSFERRED VIEW — переданные клиенты и окно комиссии менеджеру
+   ===================================================================== */
+function renderTransferred(){
+  const main = document.getElementById("main");
+  const transferred = Array.from(clients.entries()).filter(([,c])=>c.status==="Передан в дивизион");
+  const withInfo = transferred.map(([id,c])=>({id,c,ci:commissionInfo(c)}));
+  withInfo.sort((a,b)=>{
+    // без даты передачи — наверх (требует внимания), затем по сроку окончания комиссии (скоро истекающие выше)
+    if (!a.ci.transferDate && !b.ci.transferDate) return 0;
+    if (!a.ci.transferDate) return -1;
+    if (!b.ci.transferDate) return 1;
+    return a.ci.until.localeCompare(b.ci.until);
+  });
+  const nActive = withInfo.filter(x=>x.ci.active).length;
+  const nExpired = withInfo.filter(x=>x.ci.transferDate && !x.ci.active).length;
+  const nNoDate = withInfo.filter(x=>!x.ci.transferDate).length;
+
+  const intro = `<div class="banner ${nNoDate>0?"warn":"good"}" style="align-items:flex-start;">
+    <div>
+      <b>Переданные клиенты — процент менеджеру 3 месяца после передачи:</b>
+      ${nActive} ещё в окне начисления, ${nExpired} — срок истёк${nNoDate>0?`, у ${nNoDate} не указана дата передачи (откройте карточку и заполните)`:""}.
+    </div>
+  </div>`;
+
+  const block = withInfo.length===0 ? `<div class="empty">Пока нет переданных клиентов.</div>` : (()=>{
+    const rows = withInfo.map(({id,c,ci})=>{
+      let statusCell;
+      if (!ci.transferDate) statusCell = `<span class="pill warn">дата не указана</span>`;
+      else statusCell = ci.active ? `<span class="pill good">активна до ${fmtDate(ci.until)}</span>` : `<span class="pill neutral">истекла ${fmtDate(ci.until)}</span>`;
+      return `<tr data-id="${esc(id)}">
+        <td class="mono">${esc(c.code||"—")}</td>
+        <td><div class="company">${esc(c.company)}${copyBtnHtml(c.company)}</div></td>
+        <td class="muted">${esc(c.manager||"—")}</td>
+        <td class="muted">${esc(c.industry||"—")}</td>
+        <td class="muted">${esc(c.region||"—")}</td>
+        <td class="muted">${fmtDate(ci.transferDate)}</td>
+        <td>${statusCell}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="tablewrap"><div class="tscroll">
+      <table>
+        <thead><tr><th>Код</th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата передачи</th><th>Комиссия менеджеру</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
+  })();
+
+  main.innerHTML = intro + block;
+  main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = ()=>openDrawer(tr.getAttribute("data-id")));
+  wireCopyButtons(main);
+}
+
+/* =====================================================================
+   KPI VIEW — mirrors "KPI по менеджерам"
+   ===================================================================== */
+function bucketOf(c){
+  if (c.tab==="dormant") return "dormant";
+  if (c.source==="incoming") return "incoming";
+  if (c.source==="outgoing") return "outgoing";
+  return "incoming";
+}
+function clientsInKpiPeriod(){
+  const all = Array.from(clients.values());
+  if (!kpiPeriod.from && !kpiPeriod.to) return all;
+  return all.filter(c=>{
+    if (!c.registrationDate) return false;
+    if (kpiPeriod.from && c.registrationDate < kpiPeriod.from) return false;
+    if (kpiPeriod.to && c.registrationDate > kpiPeriod.to) return false;
+    return true;
+  });
+}
+
+function computeKpiData(){
+  const managers = getManagers();
+  const buckets = ["incoming","dormant","outgoing"];
+  const bucketLabels = {incoming:"Входящая заявка", dormant:"Спящий клиент", outgoing:"Исходящий (сам нашёл)"};
+  const source = clientsInKpiPeriod();
+
+  function statsFor(list){
+    const total = list.length;
+    const done = list.filter(isConverted).length;
+    return {total, done, conv: total? (done/total*100):0};
+  }
+
+  const perManager = managers.map(m=>{
+    const own = source.filter(c=>c.manager===m);
+    const byBucket = {};
+    buckets.forEach(b=> byBucket[b] = statsFor(own.filter(c=>bucketOf(c)===b)) );
+    const totalStats = statsFor(own);
+    return {manager:m, byBucket, totalStats};
+  }).filter(r=>r.totalStats.total>0);
+
+  const grand = {};
+  buckets.forEach(b=> grand[b] = statsFor(source.filter(c=>bucketOf(c)===b)) );
+  const grandTotal = statsFor(source);
+
+  return {managers, buckets, bucketLabels, statsFor, perManager, grand, grandTotal, source};
+}
+
+/* =====================================================================
+   ГРАФИКИ ДАШБОРДА KPI — рукописный inline SVG (без внешних библиотек)
+   ===================================================================== */
+const KPI_MONTH_NAMES_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+
+function computeMonthlyRegistrations(source){
+  const map = new Map();
+  source.forEach(c=>{
+    const rd = c.registrationDate;
+    if (!rd || !/^\d{4}-\d{2}/.test(rd)) return;
+    const key = rd.slice(0,7);
+    map.set(key, (map.get(key)||0)+1);
+  });
+  const keys = Array.from(map.keys()).sort();
+  const last = keys.slice(-12); // не больше 12 последних месяцев — иначе график становится нечитаемым
+  return last.map(k=>{
+    const [y,m] = k.split("-").map(Number);
+    return {label: `${KPI_MONTH_NAMES_RU[m-1]} ${String(y).slice(2)}`, value: map.get(k), key:k};
+  });
+}
+
+function computeManagerConversionChart(perManager){
+  return perManager
+    .filter(r=>r.totalStats.total>0)
+    .map(r=>({label:r.manager, value: r.totalStats.conv, total:r.totalStats.total, done:r.totalStats.done}))
+    .sort((a,b)=>b.value-a.value);
+}
+
+function niceAxisStep(maxVal){
+  if (maxVal<=0) return {axisMax:1, step:1};
+  const rough = maxVal/4;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough/mag;
+  let step;
+  if (norm<1.5) step = 1*mag; else if (norm<3) step = 2*mag; else if (norm<7) step = 5*mag; else step = 10*mag;
+  step = step || 1;
+  const axisMax = Math.ceil(maxVal/step)*step;
+  return {axisMax: axisMax||1, step};
+}
+
+function roundedTopBarPath(x,yTop,w,h,r){
+  if (h<=0) return "";
+  r = Math.max(0, Math.min(r, w/2, h));
+  const yBase = yTop + h;
+  if (r<=0.01) return `M${x},${yBase} L${x},${yTop} L${x+w},${yTop} L${x+w},${yBase} Z`;
+  return `M${x},${yBase} L${x},${yTop+r} Q${x},${yTop} ${x+r},${yTop} L${x+w-r},${yTop} Q${x+w},${yTop} ${x+w},${yTop+r} L${x+w},${yBase} Z`;
+}
+
+// data: [{label, value, ...extra}]; opts: {colorVar, valueFmt, tickFmt, height}
+function buildKpiBarChart(data, opts){
+  opts = opts||{};
+  const colorVar = opts.colorVar || "--accent";
+  const valueFmt = opts.valueFmt || (v=>String(Math.round(v)));
+  const tickFmt = opts.tickFmt || (v=>String(Math.round(v)));
+  const width = 560, height = opts.height || 220;
+  const pad = {top:18, right:10, bottom:28, left:34};
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const maxDataVal = Math.max(0, ...data.map(d=>d.value));
+  const {axisMax, step} = niceAxisStep(maxDataVal);
+  const n = Math.max(data.length,1);
+  const slot = innerW / n;
+  const barW = Math.max(8, Math.min(24, slot - 14));
+
+  const yTicks = [];
+  for (let v=0; v<=axisMax+1e-9; v+=step) yTicks.push(v);
+  const yOf = v => pad.top + innerH - (axisMax>0 ? (v/axisMax)*innerH : 0);
+
+  const gridSvg = yTicks.map(v=>{
+    const yy = yOf(v);
+    return `<line x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+      + `<text x="${(pad.left-7).toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--text-faint)">${esc(tickFmt(v))}</text>`;
+  }).join("");
+
+  const barsSvg = data.map((d,i)=>{
+    const cx = pad.left + slot*i + slot/2;
+    const x = cx - barW/2;
+    const barH = axisMax>0 ? Math.max(0,(d.value/axisMax))*innerH : 0;
+    const yTop = pad.top + innerH - barH;
+    const path = roundedTopBarPath(x, yTop, barW, barH, 4);
+    const valueLabelY = Math.max(pad.top+9, yTop-6);
+    return `<g class="kpi-bar-g" tabindex="0" data-idx="${i}">
+      <path d="${path}" fill="var(${colorVar})" class="kpi-bar-rect"/>
+      <rect x="${(x-6).toFixed(1)}" y="${pad.top}" width="${(barW+12).toFixed(1)}" height="${innerH}" fill="transparent" class="kpi-bar-hit" data-idx="${i}"/>
+      <text x="${cx.toFixed(1)}" y="${valueLabelY.toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${esc(valueFmt(d.value))}</text>
+      <text x="${cx.toFixed(1)}" y="${(pad.top+innerH+15).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${esc(d.label.length>10? d.label.slice(0,9)+"…" : d.label)}</text>
+    </g>`;
+  }).join("");
+
+  const svg = `<svg viewBox="0 0 ${width} ${height}" class="kpi-chart-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="диаграмма">
+    ${gridSvg}
+    <line x1="${pad.left}" y1="${(pad.top+innerH).toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${(pad.top+innerH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+    ${barsSvg}
+  </svg>`;
+  return svg;
+}
+
+function buildKpiChartCard(opts){
+  // opts: {id, title, data, colorVar, valueFmt, tickFmt, tooltipFmt(d), tableHead, tableRow(d)}
+  const {id, title, data} = opts;
+  if (!data.length){
+    return `<div class="chart-card">
+      <div class="chart-card-head"><h3>${esc(title)}</h3></div>
+      <div class="chart-empty">Нет данных за выбранный период</div>
+    </div>`;
+  }
+  const svg = buildKpiBarChart(data, opts);
+  const rows = data.map(opts.tableRow).join("");
+  return `<div class="chart-card" data-chart-id="${id}">
+    <div class="chart-card-head">
+      <h3>${esc(title)}</h3>
+      <button type="button" class="chart-table-toggle" data-toggle-for="${id}">Таблица</button>
+    </div>
+    <table class="chart-table" id="tbl_${id}">
+      <thead><tr>${opts.tableHead}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="chart-card-wrap" id="wrap_${id}">${svg}</div>
+  </div>`;
+}
+
+function wireKpiChart(id, data, tooltipFmt, tooltipEl){
+  const wrap = document.getElementById("wrap_"+id);
+  if (!wrap) return;
+  const groups = wrap.querySelectorAll(".kpi-bar-g");
+  groups.forEach(g=>{
+    const idx = parseInt(g.getAttribute("data-idx"),10);
+    const d = data[idx];
+    const show = (clientX, clientY)=>{
+      tooltipEl.innerHTML = tooltipFmt(d);
+      tooltipEl.classList.add("show");
+      const ttW = tooltipEl.offsetWidth||160, ttH = tooltipEl.offsetHeight||40;
+      let left = clientX + 14, top = clientY - ttH - 10;
+      if (left + ttW > window.innerWidth - 8) left = clientX - ttW - 14;
+      if (top < 8) top = clientY + 14;
+      tooltipEl.style.left = left+"px";
+      tooltipEl.style.top = top+"px";
+    };
+    const hide = ()=> tooltipEl.classList.remove("show");
+    g.addEventListener("pointermove", e=> show(e.clientX, e.clientY));
+    g.addEventListener("pointerenter", e=> show(e.clientX, e.clientY));
+    g.addEventListener("pointerleave", hide);
+    g.addEventListener("focus", ()=>{
+      const rect = g.querySelector(".kpi-bar-hit").getBoundingClientRect();
+      show(rect.left+rect.width/2, rect.top);
+    });
+    g.addEventListener("blur", hide);
+  });
+  const toggleBtn = document.querySelector(`.chart-table-toggle[data-toggle-for="${id}"]`);
+  const tbl = document.getElementById("tbl_"+id);
+  if (toggleBtn && tbl){
+    toggleBtn.onclick = ()=>{
+      const showing = tbl.classList.toggle("show");
+      toggleBtn.textContent = showing ? "График" : "Таблица";
+    };
+  }
+}
+
+function renderKpi(){
+  const main = document.getElementById("main");
+  const {buckets, bucketLabels, perManager, grand, grandTotal, source} = computeKpiData();
+
+  const headCells = buckets.map(b=>`<th colspan="3">${bucketLabels[b]}</th>`).join("");
+  const subCells = buckets.map(()=>`<th>Всего</th><th>Заказ</th><th>Конв.</th>`).join("");
+
+  const monthlyRegData = computeMonthlyRegistrations(source);
+  const managerConvData = computeManagerConversionChart(perManager);
+
+  const monthlyChartHtml = buildKpiChartCard({
+    id:"monthly", title:"Новые клиенты по месяцам (дата регистрации)",
+    data: monthlyRegData, colorVar:"--accent",
+    valueFmt: v=>String(v), tickFmt: v=>String(Math.round(v)),
+    tableHead: `<th style="width:55%;">Месяц</th><th>Новых клиентов</th>`,
+    tableRow: d=>`<tr><td>${esc(d.label)}</td><td>${d.value}</td></tr>`
+  });
+  const convChartHtml = buildKpiChartCard({
+    id:"convmgr", title:"Конверсия в заказ по менеджерам, %",
+    data: managerConvData, colorVar:"--info",
+    valueFmt: v=>v.toFixed(0)+"%", tickFmt: v=>Math.round(v)+"%",
+    tableHead: `<th style="width:40%;">Менеджер</th><th>Заявок</th><th>Заказов</th><th>Конв.</th>`,
+    tableRow: d=>`<tr><td title="${esc(d.label)}">${esc(d.label)}</td><td>${d.total}</td><td>${d.done}</td><td>${d.value.toFixed(0)}%</td></tr>`
+  });
+
+  function rowCells(r){
+    return buckets.map(b=>{
+      const s = r.byBucket[b];
+      return `<td>${s.total}</td><td>${s.done}</td><td>${s.conv.toFixed(0)}%</td>`;
+    }).join("") + `<td>${r.totalStats.total}</td><td>${r.totalStats.done}</td><td>${r.totalStats.conv.toFixed(0)}%</td>`;
+  }
+
+  main.innerHTML = `
+    <div class="kpi-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <h2>KPI менеджеров — три источника клиентов</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn subtle sm" id="btnExportKpi">⬇ Скачать Excel</button>
+          <button class="btn subtle sm" id="btnExportJson">⬇ JSON (резервная копия базы)</button>
+          <button class="btn subtle sm" id="btnDownloadLog2" title="Лог событий этого браузера — для отладки ошибок">⬇ Лог событий</button>
+          <button class="btn subtle sm" id="btnClearLog" title="Очистить лог событий этого браузера">🧹 Очистить лог</button>
+        </div>
+      </div>
+      <div class="toolbar" style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <label class="lbl" style="margin:0;">Период (по дате регистрации)</label>
+        <input type="date" id="kpiFrom" value="${esc(kpiPeriod.from)}"/>
+        <span class="muted">—</span>
+        <input type="date" id="kpiTo" value="${esc(kpiPeriod.to)}"/>
+        ${(kpiPeriod.from||kpiPeriod.to) ? `<button class="btn subtle sm" id="btnKpiPeriodClear">Сбросить</button>` : ""}
+        <span class="helptext">Заявок за период: <b>${grandTotal.total}</b></span>
+      </div>
+      <div class="tscroll">
+      <table class="kpi">
+        <thead>
+          <tr><th>Менеджер</th>${headCells}<th colspan="3">Итого</th></tr>
+          <tr><th></th>${subCells}<th>Всего</th><th>Заказ</th><th>Конв.</th></tr>
+        </thead>
+        <tbody>
+          ${perManager.map(r=>`<tr><td>${esc(r.manager)}</td>${rowCells(r)}</tr>`).join("") || `<tr><td colspan="10" class="muted">Нет данных</td></tr>`}
+        </tbody>
+        <tfoot>
+          <tr><td>Итого по всем</td>${buckets.map(b=>`<td>${grand[b].total}</td><td>${grand[b].done}</td><td>${grand[b].conv.toFixed(0)}%</td>`).join("")}<td>${grandTotal.total}</td><td>${grandTotal.done}</td><td>${grandTotal.conv.toFixed(0)}%</td></tr>
+        </tfoot>
+      </table>
+      </div>
+      <div class="helptext" style="margin-top:10px;">«Заказ» считается по статусу «Активен (сделал заказ)» или «Передан в дивизион». Обновляйте статус по факту первой отгрузки, чтобы конверсия считалась верно. Период фильтрует по дате регистрации партнёра; клиенты без даты регистрации при выбранном периоде не учитываются.</div>
+      <div class="kpi-charts-grid">
+        ${monthlyChartHtml}
+        ${convChartHtml}
+      </div>
+    </div>
+    <div class="kpi-tooltip" id="kpiTooltip"></div>`;
+
+  const btnExp = document.getElementById("btnExportKpi");
+  if (btnExp) btnExp.onclick = downloadKpiExcel;
+  const btnJson = document.getElementById("btnExportJson");
+  if (btnJson) btnJson.onclick = downloadFullJsonBackup;
+  const btnLog2 = document.getElementById("btnDownloadLog2");
+  if (btnLog2) btnLog2.onclick = downloadAppLog;
+  const btnClearLog = document.getElementById("btnClearLog");
+  if (btnClearLog) btnClearLog.onclick = clearAppLog;
+  document.getElementById("kpiFrom").onchange = (e)=>{ kpiPeriod.from = e.target.value; renderKpi(); };
+  document.getElementById("kpiTo").onchange = (e)=>{ kpiPeriod.to = e.target.value; renderKpi(); };
+  const kpiClearBtn = document.getElementById("btnKpiPeriodClear");
+  if (kpiClearBtn) kpiClearBtn.onclick = ()=>{ kpiPeriod.from=""; kpiPeriod.to=""; renderKpi(); };
+
+  const kpiTooltip = document.getElementById("kpiTooltip");
+  if (kpiTooltip){
+    if (monthlyRegData.length){
+      wireKpiChart("monthly", monthlyRegData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${esc(String(d.value))} нов. клиентов</div>`, kpiTooltip);
+    }
+    if (managerConvData.length){
+      wireKpiChart("convmgr", managerConvData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${d.value.toFixed(0)}% (${d.done} из ${d.total})</div>`, kpiTooltip);
+    }
+  }
+}
+
+/* =====================================================================
+   EXCEL EXPORT — дашборд KPI (руками собранный .xlsx, без внешних библиотек)
+   ===================================================================== */
+function xmlEsc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function xlsxColLetter(n){ let s=""; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+function xlsxCell(colIdx, rowIdx, val, opts){
+  opts = opts||{};
+  const ref = xlsxColLetter(colIdx)+rowIdx;
+  const styleAttr = opts.style!=null ? ` s="${opts.style}"` : "";
+  if (opts.type==="Number" && val!==""&&val!=null&&!isNaN(val)){
+    return `<c r="${ref}"${styleAttr}><v>${val}</v></c>`;
+  }
+  const text = xmlEsc(val==null?"":String(val));
+  return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`;
+}
+function xlsxRow(rowIdx, cells){
+  return `<row r="${rowIdx}">${cells.map((c,i)=>xlsxCell(i+1, rowIdx, c.val, c)).join("")}</row>`;
+}
+function xlsxSheetXml(rows){
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.join("")}</sheetData></worksheet>`;
+}
+
+// --- минимальный ZIP-контейнер (метод "store", без сжатия) — из него состоит .xlsx ---
+const XLSX_CRC_TABLE = (()=>{ const t=[]; for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++){ c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); } t[n]=c>>>0; } return t; })();
+function xlsxCrc32(bytes){ let crc=0xFFFFFFFF; for(let i=0;i<bytes.length;i++){ crc = XLSX_CRC_TABLE[(crc^bytes[i])&0xFF] ^ (crc>>>8); } return (crc^0xFFFFFFFF)>>>0; }
+function xlsxDosDateTime(d){
+  const dosDate = (((d.getFullYear()-1980)&0x7F)<<9) | (((d.getMonth()+1)&0xF)<<5) | (d.getDate()&0x1F);
+  const dosTime = ((d.getHours()&0x1F)<<11) | ((d.getMinutes()&0x3F)<<5) | (Math.floor(d.getSeconds()/2)&0x1F);
+  return {dosDate, dosTime};
+}
+function makeZip(files){ // files: [{name, data: Uint8Array}]
+  const enc = new TextEncoder();
+  const {dosDate, dosTime} = xlsxDosDateTime(new Date());
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  files.forEach(f=>{
+    const nameBytes = enc.encode(f.name);
+    const data = f.data;
+    const crc = xlsxCrc32(data);
+    const size = data.length;
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const dv = new DataView(local.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0, true);
+    dv.setUint16(8, 0, true);
+    dv.setUint16(10, dosTime, true);
+    dv.setUint16(12, dosDate, true);
+    dv.setUint32(14, crc, true);
+    dv.setUint32(18, size, true);
+    dv.setUint32(22, size, true);
+    dv.setUint16(26, nameBytes.length, true);
+    dv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cdv = new DataView(central.buffer);
+    cdv.setUint32(0, 0x02014b50, true);
+    cdv.setUint16(4, 20, true);
+    cdv.setUint16(6, 20, true);
+    cdv.setUint16(8, 0, true);
+    cdv.setUint16(10, 0, true);
+    cdv.setUint16(12, dosTime, true);
+    cdv.setUint16(14, dosDate, true);
+    cdv.setUint32(16, crc, true);
+    cdv.setUint32(20, size, true);
+    cdv.setUint32(24, size, true);
+    cdv.setUint16(28, nameBytes.length, true);
+    cdv.setUint16(30, 0, true);
+    cdv.setUint16(32, 0, true);
+    cdv.setUint16(34, 0, true);
+    cdv.setUint16(36, 0, true);
+    cdv.setUint32(38, 0, true);
+    cdv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  });
+
+  const centralSize = centralParts.reduce((s,p)=>s+p.length,0);
+  const centralOffset = offset;
+  const eocd = new Uint8Array(22);
+  const edv = new DataView(eocd.buffer);
+  edv.setUint32(0, 0x06054b50, true);
+  edv.setUint16(4, 0, true);
+  edv.setUint16(6, 0, true);
+  edv.setUint16(8, files.length, true);
+  edv.setUint16(10, files.length, true);
+  edv.setUint32(12, centralSize, true);
+  edv.setUint32(16, centralOffset, true);
+  edv.setUint16(20, 0, true);
+
+  return new Blob([...localParts, ...centralParts, eocd], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+
+function buildXlsxBlob(sheets){ // sheets: [{name, rows}], rows: массив строк-массивов {val,type,style}
+  const enc = new TextEncoder();
+  const sheetXmls = sheets.map(sh => xlsxSheetXml(sh.rows.map((cells,i)=>xlsxRow(i+1, cells))));
+
+  const overrideParts = sheets.map((sh,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${overrideParts}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+
+  const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+
+  const sheetTags = sheets.map((sh,i)=>`<sheet name="${xmlEsc(sh.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("");
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetTags}</sheets></workbook>`;
+
+  const sheetRels = sheets.map((sh,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("");
+  const stylesRelId = sheets.length+1;
+  const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels}<Relationship Id="rId${stylesRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFEFEF"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>`;
+
+  const files = [
+    {name:"[Content_Types].xml", data: enc.encode(contentTypesXml)},
+    {name:"_rels/.rels", data: enc.encode(rootRelsXml)},
+    {name:"xl/workbook.xml", data: enc.encode(workbookXml)},
+    {name:"xl/_rels/workbook.xml.rels", data: enc.encode(workbookRelsXml)},
+    {name:"xl/styles.xml", data: enc.encode(stylesXml)},
+  ];
+  sheetXmls.forEach((xml,i)=> files.push({name:`xl/worksheets/sheet${i+1}.xml`, data: enc.encode(xml)}));
+
+  return makeZip(files);
+}
+
+function saveBlobAsFile(filename, blob){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+
+function downloadFullJsonBackup(){
+  // Полная выгрузка всех клиентов, которые видны текущему пользователю (у админа — вся база).
+  const arr = Array.from(clients.entries()).map(([id, c])=> Object.assign({ id }, c));
+  const blob = new Blob([JSON.stringify(arr, null, 2)], { type: "application/json" });
+  saveBlobAsFile(`CRM_backup_${todayISO()}.json`, blob);
+}
+
+async function downloadKpiExcel(){
+  const btnExp = document.getElementById("btnExportKpi");
+  const kd = computeKpiData();
+
+  // Лист 1 — KPI по менеджерам (как на экране)
+  const sheet1Rows = [];
+  const headerRow1 = [{val:"Менеджер", style:1}];
+  kd.buckets.forEach(b=>{
+    headerRow1.push({val:kd.bucketLabels[b]+" — всего", style:1});
+    headerRow1.push({val:kd.bucketLabels[b]+" — заказ", style:1});
+    headerRow1.push({val:kd.bucketLabels[b]+" — конв. %", style:1});
+  });
+  headerRow1.push({val:"Итого — всего", style:1}, {val:"Итого — заказ", style:1}, {val:"Итого — конв. %", style:1});
+  sheet1Rows.push(headerRow1);
+
+  kd.perManager.forEach(r=>{
+    const row = [{val:r.manager}];
+    kd.buckets.forEach(b=>{
+      const s = r.byBucket[b];
+      row.push({val:s.total,type:"Number"}, {val:s.done,type:"Number"}, {val:Number(s.conv.toFixed(0)),type:"Number"});
+    });
+    row.push({val:r.totalStats.total,type:"Number"}, {val:r.totalStats.done,type:"Number"}, {val:Number(r.totalStats.conv.toFixed(0)),type:"Number"});
+    sheet1Rows.push(row);
+  });
+
+  const footRow = [{val:"Итого по всем", style:1}];
+  kd.buckets.forEach(b=>{
+    const s = kd.grand[b];
+    footRow.push({val:s.total,type:"Number",style:1}, {val:s.done,type:"Number",style:1}, {val:Number(s.conv.toFixed(0)),type:"Number",style:1});
+  });
+  footRow.push({val:kd.grandTotal.total,type:"Number",style:1}, {val:kd.grandTotal.done,type:"Number",style:1}, {val:Number(kd.grandTotal.conv.toFixed(0)),type:"Number",style:1});
+  sheet1Rows.push(footRow);
+
+  // Лист 2 — список клиентов за выбранный на дашборде период (по дате регистрации)
+  const clientHeader = ["Код","Компания","Менеджер","Раздел","Источник","Отрасль","Дивизион","Этап","Статус","Регион","Скоринг","Сегмент","Дата регистрации","Дата последнего контакта","Дата передачи","Комиссия менеджеру до","Комиссия активна"];
+  const sheet2Rows = [ clientHeader.map(h=>({val:h, style:1})) ];
+  kd.source
+    .slice()
+    .sort((a,b)=> (a.company||"").localeCompare(b.company||"","ru"))
+    .forEach(c=>{
+      const s = computeScores(c);
+      const ci = commissionInfo(c);
+      sheet2Rows.push([
+        {val:c.code||""},
+        {val:c.company||""},
+        {val:c.manager||""},
+        {val:c.tab==="dormant"?"Спящие клиенты":"Входящие и исходящие"},
+        {val:kd.bucketLabels[bucketOf(c)]||""},
+        {val:c.industry||""},
+        {val:s.division||""},
+        {val:c.stage||""},
+        {val:c.status||""},
+        {val:c.region||""},
+        {val:s.total!=null?s.total:"", type:s.total!=null?"Number":"String"},
+        {val:s.segment?s.segment.code:""},
+        {val:fmtDate(c.registrationDate)},
+        {val:fmtDate(c.lastContactDate)},
+        {val:fmtDate(c.transferDate)},
+        {val:ci&&ci.until?fmtDate(ci.until):""},
+        {val:ci?(ci.active?"да":"нет"):""},
+      ]);
+    });
+
+  // Лист 3 — «Передача в дивизион» (готовы к передаче, как во вкладке)
+  const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
+  ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
+  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
+  ready.forEach(([,c])=>{
+    const h = c.handover||{};
+    const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
+    sheet3Rows.push([
+      {val:c.code||""},
+      {val:c.company||""},
+      {val:c.manager||""},
+      {val:c.industry||""},
+      {val:c.region||""},
+      {val:fmtDate(c.registrationDate)},
+      {val:c.contactPerson||""},
+      {val:c.phone||""},
+      {val:c.email||""},
+      {val:c.nextStep||""},
+      {val:fmtDate(c.lastContactDate)},
+      {val: filled ? "заполнено" : "нужно заполнить"},
+    ]);
+  });
+
+  // Лист 4 — «Переданные (комиссия)» (как во вкладке)
+  const transferred = Array.from(clients.entries()).filter(([,c])=>c.status==="Передан в дивизион");
+  const withInfo = transferred.map(([id,c])=>({id,c,ci:commissionInfo(c)}));
+  withInfo.sort((a,b)=>{
+    if (!a.ci.transferDate && !b.ci.transferDate) return 0;
+    if (!a.ci.transferDate) return -1;
+    if (!b.ci.transferDate) return 1;
+    return a.ci.until.localeCompare(b.ci.until);
+  });
+  const sheet4Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата передачи","Статус комиссии"].map(h=>({val:h, style:1})) ];
+  withInfo.forEach(({c,ci})=>{
+    let statusText;
+    if (!ci.transferDate) statusText = "дата не указана";
+    else statusText = ci.active ? `активна до ${fmtDate(ci.until)}` : `истекла ${fmtDate(ci.until)}`;
+    sheet4Rows.push([
+      {val:c.code||""},
+      {val:c.company||""},
+      {val:c.manager||""},
+      {val:c.industry||""},
+      {val:c.region||""},
+      {val:fmtDate(ci.transferDate)},
+      {val:statusText},
+    ]);
+  });
+
+  const zipBlob = buildXlsxBlob([
+    {name:"KPI по менеджерам", rows: sheet1Rows},
+    {name:"Клиенты", rows: sheet2Rows},
+    {name:"Передача в дивизион", rows: sheet3Rows},
+    {name:"Переданные (комиссия)", rows: sheet4Rows},
+  ]);
+
+  let periodSuffix = "";
+  if (kpiPeriod.from && kpiPeriod.to) periodSuffix = `_${kpiPeriod.from}_${kpiPeriod.to}`;
+  else if (kpiPeriod.from) periodSuffix = `_с_${kpiPeriod.from}`;
+  else if (kpiPeriod.to) periodSuffix = `_по_${kpiPeriod.to}`;
+  if (btnExp){ btnExp.disabled = true; btnExp.textContent = "Готовим файл…"; }
+  try {
+    saveBlobAsFile(`CRM_KPI_${todayISO()}${periodSuffix}.xlsx`, zipBlob);
+  } catch(e){
+    alert("Не удалось скачать файл: "+(e&&e.message?e.message:"неизвестная ошибка"));
+  } finally {
+    if (btnExp){ btnExp.disabled = false; btnExp.textContent = "⬇ Скачать Excel"; }
+  }
+}
+
+async function downloadListExcel(rowsClients){
+  const btn = document.getElementById("btnExportList");
+
+  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
+  const rows = [ header.map(h=>({val:h, style:1})) ];
+  rowsClients.forEach(c=>{
+    const s = computeScores(c);
+    const days = daysSince(c.lastContactDate);
+    rows.push([
+      {val:c.code||""},
+      {val:c.company||""},
+      {val:c.manager||""},
+      {val:c.tab==="dormant"?"Спящие клиенты":"Входящие и исходящие"},
+      {val:c.industry||""},
+      {val:c.stage||""},
+      {val:c.status||""},
+      {val:s.segment?s.segment.code:""},
+      {val:s.total, type:"Number"},
+      {val: c.revenue2025!=null && c.revenue2025!=="" ? Number(c.revenue2025) : "", type: c.revenue2025!=null && c.revenue2025!=="" ? "Number" : "String"},
+      {val:c.region||""},
+      {val:c.contactPerson||""},
+      {val:c.phone||""},
+      {val:c.email||""},
+      {val:fmtDate(c.registrationDate)},
+      {val:fmtDate(c.lastContactDate)},
+      {val: days!=null?days:"", type: days!=null?"Number":"String"},
+      {val:c.nextStep||""},
+    ]);
+  });
+
+  const sortColLabel = (SORT_COLUMNS.find(x=>x.key===sortCol)||{}).label || sortCol;
+  const filterLines = [
+    ["Вкладка", tabFilter==="all"?"Все клиенты":(tabFilter==="dormant"?"Спящие клиенты":"Входящие и исходящие")],
+    ["Поиск", filters.search||"—"],
+    ["Менеджер", filters.manager==="all"?"Все":filters.manager],
+    ["Статус", filters.status==="all"?"Любой":filters.status],
+    ["Сегмент", filters.segment==="all"?"Все":filters.segment],
+    ["Дата регистрации от", filters.regDateFrom||"—"],
+    ["Дата регистрации до", filters.regDateTo||"—"],
+    ["Сортировка", sortColLabel+" ("+(sortDir==="asc"?"по возрастанию":"по убыванию")+")"],
+    ["Строк в выгрузке", String(rowsClients.length)],
+    ["Дата выгрузки", fmtDateTime(nowISO())],
+  ];
+  const filterRows = [ ["Параметр","Значение"].map(h=>({val:h, style:1})) ];
+  filterLines.forEach(([k,v])=> filterRows.push([{val:k},{val:v}]));
+
+  const zipBlob = buildXlsxBlob([
+    {name:"Список", rows},
+    {name:"Фильтры", rows: filterRows},
+  ]);
+
+  if (btn){ btn.disabled = true; btn.textContent = "Готовим файл…"; }
+  try {
+    saveBlobAsFile(`CRM_список_${todayISO()}.xlsx`, zipBlob);
+  } catch(e){
+    alert("Не удалось скачать файл: "+(e&&e.message?e.message:"неизвестная ошибка"));
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = "⬇ Excel (текущий список)"; }
+  }
+}
+
+/* =====================================================================
+   DRAWER — client card
+   ===================================================================== */
+function blankClient(tab){
+  const wm = currentManager();
+  return {
+    code:"", company:"", manager: wm, tab, source: tab==="flow" ? "incoming" : null,
+    registrationDate: todayISO(), industry:null, companySize:null, potentialVolume:null,
+    flowHistory: tab==="flow" ? "Входящая заявка — < 2 месяцев с обращения" : null,
+    engagement:{responded:false,hadCall:false,requestedKp:false},
+    stage:"1. Квалификация", status:"Новый", rejectionReason:null, rejectionReasonOther:"",
+    lastContactDate:null, nextStep:"", region:"", contactPerson:"", email:"", phone:"", website:"",
+    counterpartyStatusRef:"", revenue2025:null, transferDate:null,
+    handover:{agreements:"",nextOrders:"",openQuestions:""},
+    createdAt: nowISO(), updatedAt: nowISO(), updatedBy: wm, importNote:"",
+    statusHistory: [],
+  };
+}
+
+function openDrawer(id, newTab){
+  const isNew = !id;
+  const draft = isNew ? blankClient(newTab) : JSON.parse(JSON.stringify(clients.get(id)));
+  drawerState = { id, isNew, draft };
+  drawerBusy = false;
+  document.getElementById("backdrop").classList.add("show");
+  document.getElementById("backdrop").onclick = closeDrawer;
+  renderDrawer();
+  requestAnimationFrame(()=> document.getElementById("drawer").classList.add("show"));
+}
+function closeDrawer(){
+  document.getElementById("drawer").classList.remove("show");
+  document.getElementById("backdrop").classList.remove("show");
+  setTimeout(()=>{ drawerState=null; document.getElementById("drawer").innerHTML=""; }, 200);
+}
+
+function fieldOpts(list, value, placeholder){
+  let html = placeholder ? `<option value="">${esc(placeholder)}</option>` : "";
+  list.forEach(v=>{ html += `<option value="${esc(v)}" ${v===value?"selected":""}>${esc(v)}</option>`; });
+  return html;
+}
+
+function renderDrawer(){
+  const { id, isNew, draft } = drawerState;
+  const s = computeScores(draft);
+  const drawer = document.getElementById("drawer");
+  const dupCount = draft.code ? codeCounts().get(draft.code)||0 : 0;
+
+  drawer.innerHTML = `
+    <div class="drawer-head">
+      <div style="flex:1;">
+        <h2>${isNew? "Новый клиент" : esc(draft.company||"Без названия")+copyBtnHtml(draft.company)}</h2>
+        <div class="meta">${draft.tab==="dormant"?"Спящие клиенты":"Входящие и исходящие"} ${draft.code?" · код "+esc(draft.code):""}
+          ${dupCount>1?'<span class="warnflag"> · ⚠ код встречается ещё в '+(dupCount-1)+' карточке(ах)</span>':''}
+        </div>
+      </div>
+      <button class="btn subtle sm" id="btnClose">Закрыть</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-foot">
+      <button class="btn" id="btnSave">Сохранить</button>
+      ${!isNew?'<button class="btn subtle" id="btnDelete">Удалить</button>':''}
+      <div style="flex:1;"></div>
+      ${draft.updatedAt?'<span class="helptext">Обновлено '+fmtDate(draft.updatedAt.slice(0,10))+' · '+esc(draft.updatedBy||"")+'</span>':''}
+    </div>`;
+
+  document.getElementById("btnClose").onclick = closeDrawer;
+  document.getElementById("btnSave").onclick = ()=> saveDrawer();
+  const delBtn = document.getElementById("btnDelete");
+  if (delBtn) delBtn.onclick = ()=> deleteDrawer();
+  wireCopyButtons(drawer);
+
+  renderDrawerBody();
+}
+
+function renderDrawerBody(){
+  const { draft } = drawerState;
+  const s = computeScores(draft);
+  const body = document.getElementById("drawerBody");
+  const managers = getManagers();
+
+  body.innerHTML = `
+    <div>
+      <div class="section-title">Карточка</div>
+      <div class="field-grid" style="margin-top:8px;">
+        <div class="full"><label class="lbl">Компания *</label><input type="text" id="f_company" value="${esc(draft.company)}"/></div>
+        <div><label class="lbl">Код клиента (1С)</label><input type="text" id="f_code" value="${esc(draft.code)}" placeholder="1-00000000"/></div>
+        <div><label class="lbl">Менеджер</label>
+          <select id="f_manager">${fieldOpts(managers, draft.manager, "— выбрать —")}</select>
+        </div>
+        <div><label class="lbl">Дата регистрации</label><input type="date" id="f_regdate" value="${esc(draft.registrationDate||"")}"/></div>
+        ${draft.tab==="flow" ? `<div><label class="lbl">Источник</label>
+          <select id="f_source">
+            <option value="incoming" ${draft.source==="incoming"?"selected":""}>Входящая заявка</option>
+            <option value="outgoing" ${draft.source==="outgoing"?"selected":""}>Исходящий (менеджер нашёл сам)</option>
+          </select></div>` : `<div><label class="lbl">Вкладка</label><input type="text" value="Спящие клиенты (из общей базы)" disabled/></div>`}
+        <div><label class="lbl">Регион</label><input type="text" id="f_region" value="${esc(draft.region)}"/></div>
+        <div><label class="lbl">Контактное лицо</label><input type="text" id="f_contact" value="${esc(draft.contactPerson)}"/></div>
+        <div><label class="lbl">Email</label><input type="text" id="f_email" value="${esc(draft.email)}"/></div>
+        <div><label class="lbl">Телефон</label><input type="text" id="f_phone" value="${esc(draft.phone)}"/></div>
+        <div><label class="lbl">Сайт</label><input type="text" id="f_site" value="${esc(draft.website)}"/></div>
+        <div><label class="lbl">Статус контрагента (справочно)</label><input type="text" id="f_counterparty" value="${esc(draft.counterpartyStatusRef)}"/></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Скоринг (0–100)</div>
+      <div class="scoreblock" id="scoreBlock">
+        <div>
+          <label class="lbl">Отрасль</label>
+          <select id="f_industry">${fieldOpts(INDUSTRIES.map(x=>x[0]), draft.industry, "— не указано —")}</select>
+        </div>
+        <div>
+          <label class="lbl">Размер компании</label>
+          <select id="f_size">${fieldOpts(SIZES.map(x=>x[0]), draft.companySize, "— не указано —")}</select>
+        </div>
+        <div class="scorerow"><span>Баллы: ICP-fit (отрасль + размер)</span><b id="sc_icp">${s.icp}</b><span>/ 30</span></div>
+
+        <div>
+          <label class="lbl">Потенциальный объём закупок в год</label>
+          <select id="f_volume">${fieldOpts(VOLUMES.map(x=>x[0]), draft.potentialVolume, "— не выяснено —")}</select>
+        </div>
+        <div class="scorerow"><span>Баллы: потенциал</span><b id="sc_vol">${s.volume}</b><span>/ 25</span></div>
+
+        <div>
+          <label class="lbl">Вовлечённость</label>
+          <label class="checkline"><input type="checkbox" data-eng="responded" ${draft.engagement.responded?"checked":""}/> Ответил на первый контакт (+10)</label>
+          <label class="checkline"><input type="checkbox" data-eng="hadCall" ${draft.engagement.hadCall?"checked":""}/> Провёл встречу / звонок (+10)</label>
+          <label class="checkline"><input type="checkbox" data-eng="requestedKp" ${draft.engagement.requestedKp?"checked":""}/> Запросил КП / образцы (+5)</label>
+        </div>
+        <div class="scorerow"><span>Баллы: вовлечённость</span><b id="sc_eng">${s.eng}</b><span>/ 25</span></div>
+
+        ${draft.tab==="flow" ? `<div>
+          <label class="lbl">История обращения</label>
+          <select id="f_flowhist">${fieldOpts(FLOW_HISTORY.map(x=>x[0]), draft.flowHistory, "— не выбрано —")}</select>
+        </div>` : `<div class="helptext" id="autoHistoryNote">История (авто по дате регистрации): <b>${esc(s.historyLabel)}</b></div>`}
+        <div class="scorerow"><span>Баллы: история</span><b id="sc_hist">${s.historyPts}</b><span>/ 20</span></div>
+
+        <div class="totalscore">
+          <div><div class="helptext">ИТОГО баллов</div><div class="num" id="sc_total">${s.total}</div></div>
+          <div id="sc_segment"><span class="pill ${s.segment.style}" style="font-size:14px;padding:6px 14px;">${s.segment.code} · ${esc(s.segment.label)}</span><div class="helptext" style="max-width:200px;text-align:right;">${esc(s.segment.desc)}</div></div>
+        </div>
+      </div>
+      <details class="legend" style="margin-top:8px;">
+        <summary>Как считаются баллы</summary>
+        <table>
+          <tr><td>ICP-fit (отрасль 0–15 + размер 0–15)</td><td>максимум 30</td></tr>
+          <tr><td>Потенциальный объём закупок в год</td><td>максимум 25</td></tr>
+          <tr><td>Вовлечённость (обновляется по ходу работы)</td><td>максимум 25</td></tr>
+          <tr><td>История / контекст обращения</td><td>максимум 20</td></tr>
+          <tr><td>A — приоритет</td><td>70–100</td></tr>
+          <tr><td>B — в работе</td><td>40–69</td></tr>
+          <tr><td>C — низкий приоритет</td><td>20–39</td></tr>
+          <tr><td>D — заморозка</td><td>0–19</td></tr>
+        </table>
+      </details>
+    </div>
+
+    <div>
+      <div class="section-title">Воронка и статус</div>
+      <div class="field-grid" style="margin-top:8px;">
+        <div><label class="lbl">Этап воронки</label><select id="f_stage">${fieldOpts(STAGES, draft.stage, "— не начат —")}</select></div>
+        <div><label class="lbl">Статус</label><select id="f_status">${fieldOpts(STATUSES, draft.status)}</select></div>
+        <div id="rejWrap" class="full" style="display:${draft.status==="Отказ"?"block":"none"};">
+          <label class="lbl">Причина отказа</label>
+          <select id="f_reason">${fieldOpts(REJECTION_REASONS, draft.rejectionReason, "— выбрать —")}</select>
+          ${draft.rejectionReason==="Другое" ? `<input type="text" id="f_reason_other" placeholder="Опишите причину" value="${esc(draft.rejectionReasonOther||"")}" style="margin-top:6px;"/>` : ""}
+        </div>
+        <div><label class="lbl">Дата последнего контакта</label><input type="date" id="f_lastcontact" value="${esc(draft.lastContactDate||"")}"/></div>
+        <div id="transferWrap" style="display:${draft.status==="Передан в дивизион"?"block":"none"};">
+          <label class="lbl">Дата передачи в дивизион</label>
+          <input type="date" id="f_transferdate" value="${esc(draft.transferDate||"")}"/>
+          <div class="helptext">От этой даты считаем 3 месяца, в течение которых менеджеру идёт процент.</div>
+        </div>
+        <div class="full"><label class="lbl">Следующий шаг / комментарий</label><textarea id="f_nextstep">${esc(draft.nextStep)}</textarea></div>
+      </div>
+      <div id="commissionBanner">${commissionBannerHtml(draft)}</div>
+      <div class="readonlybadges" style="margin-top:10px;">
+        <span class="pill ${s.division==="Стандарт"?"info":"violet"}">Дивизион: ${esc(s.division)}</span>
+        <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":"Пока не готов к передаче"}</span>
+      </div>
+      <div class="helptext">Дивизион считается автоматически по отрасли. «Готов к передаче» появляется, когда отрасль = Стандарт и статус = Активен (сделал заказ).</div>
+    </div>
+
+    <div>
+      <details class="legend">
+        <summary>История статусов ${(draft.statusHistory&&draft.statusHistory.length) ? "("+draft.statusHistory.length+")" : ""}</summary>
+        ${(!draft.statusHistory || draft.statusHistory.length===0) ? `<div class="helptext" style="margin-top:6px;">Пока нет записей — появятся после сохранения смены статуса.</div>` : `
+        <table>
+          ${draft.statusHistory.slice().reverse().map(h=>`<tr><td><span class="pill ${STATUS_STYLE[h.status]||"neutral"}">${esc(h.status||"—")}</span></td><td class="muted">${fmtDateTime(h.at)}</td><td class="muted">${esc(h.by||"—")}</td></tr>`).join("")}
+        </table>`}
+      </details>
+    </div>
+
+    ${draft.tab==="dormant" ? `<div>
+      <div class="section-title">Справочно</div>
+      <div class="field-grid" style="margin-top:8px;">
+        <div><label class="lbl">Выручка за 2025, ₽ (DaData)</label><input type="number" id="f_revenue" value="${draft.revenue2025==null?"":draft.revenue2025}"/></div>
+      </div>
+    </div>` : ""}
+
+    <div>
+      <div class="section-title">Подготовка к передаче в Дивизион 2</div>
+      <div class="field-grid" style="margin-top:8px;">
+        <div class="full"><label class="lbl">Важные договорённости</label><textarea id="f_agreements">${esc(draft.handover.agreements)}</textarea></div>
+        <div class="full"><label class="lbl">Потенциальные следующие заказы</label><textarea id="f_nextorders">${esc(draft.handover.nextOrders)}</textarea></div>
+        <div class="full"><label class="lbl">Открытые вопросы</label><textarea id="f_openq">${esc(draft.handover.openQuestions)}</textarea></div>
+      </div>
+    </div>
+    ${draft.importNote ? `<div class="helptext">Заметка при импорте: ${esc(draft.importNote)}</div>` : ""}
+  `;
+
+  wireDrawerInputs();
+}
+
+function wireDrawerInputs(){
+  const { draft } = drawerState;
+  const bind = (id, path, transform)=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    const ev = (el.tagName==="SELECT"||el.type==="date"||el.type==="checkbox") ? "change" : "input";
+    el.addEventListener(ev, ()=>{
+      let v = el.type==="checkbox" ? el.checked : el.value;
+      if (transform) v = transform(v);
+      setPath(draft, path, v);
+      onDraftChanged();
+    });
+  };
+  const setPath = (obj, path, v)=>{
+    const parts = path.split(".");
+    let o = obj;
+    for (let i=0;i<parts.length-1;i++) o = o[parts[i]];
+    o[parts[parts.length-1]] = v;
+  };
+
+  bind("f_company","company");
+  bind("f_code","code");
+  bind("f_manager","manager");
+  bind("f_regdate","registrationDate");
+  bind("f_source","source");
+  bind("f_region","region");
+  bind("f_contact","contactPerson");
+  bind("f_email","email");
+  bind("f_phone","phone");
+  bind("f_site","website");
+  bind("f_counterparty","counterpartyStatusRef");
+  bind("f_industry","industry", v=>v||null);
+  bind("f_size","companySize", v=>v||null);
+  bind("f_volume","potentialVolume", v=>v||null);
+  bind("f_flowhist","flowHistory", v=>v||null);
+  bind("f_stage","stage", v=>v||null);
+  bind("f_lastcontact","lastContactDate", v=>v||null);
+  bind("f_transferdate","transferDate", v=>v||null);
+  bind("f_nextstep","nextStep");
+  bind("f_revenue","revenue2025", v=>v===""?null:Number(v));
+  bind("f_agreements","handover.agreements");
+  bind("f_nextorders","handover.nextOrders");
+  bind("f_openq","handover.openQuestions");
+  bind("f_reason_other","rejectionReasonOther");
+
+  document.querySelectorAll("[data-eng]").forEach(el=>{
+    el.addEventListener("change", ()=>{ draft.engagement[el.getAttribute("data-eng")] = el.checked; onDraftChanged(); });
+  });
+  const statusSel = document.getElementById("f_status");
+  if (statusSel) statusSel.addEventListener("change", ()=>{
+    draft.status = statusSel.value;
+    if (draft.status!=="Отказ"){ draft.rejectionReason=null; draft.rejectionReasonOther=""; }
+    if (draft.status==="Передан в дивизион" && !draft.transferDate){ draft.transferDate = todayISO(); }
+    renderDrawerBody();
+  });
+  const reasonSel = document.getElementById("f_reason");
+  if (reasonSel) reasonSel.addEventListener("change", ()=>{
+    draft.rejectionReason = reasonSel.value || null;
+    renderDrawerBody();
+  });
+}
+
+function onDraftChanged(){
+  const { draft } = drawerState;
+  const s = computeScores(draft);
+  const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+  set("sc_icp", s.icp); set("sc_vol", s.volume); set("sc_eng", s.eng); set("sc_hist", s.historyPts); set("sc_total", s.total);
+  const segEl = document.getElementById("sc_segment");
+  if (segEl) segEl.innerHTML = `<span class="pill ${s.segment.style}" style="font-size:14px;padding:6px 14px;">${s.segment.code} · ${esc(s.segment.label)}</span><div class="helptext" style="max-width:200px;text-align:right;">${esc(s.segment.desc)}</div>`;
+  const note = document.getElementById("autoHistoryNote");
+  if (note) note.innerHTML = `История (авто по дате регистрации): <b>${esc(s.historyLabel)}</b>`;
+  const badges = document.querySelector(".readonlybadges");
+  if (badges) badges.innerHTML = `
+    <span class="pill ${s.division==="Стандарт"?"info":"violet"}">Дивизион: ${esc(s.division)}</span>
+    <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":"Пока не готов к передаче"}</span>`;
+  const commBanner = document.getElementById("commissionBanner");
+  if (commBanner) commBanner.innerHTML = commissionBannerHtml(draft);
+}
+
+async function saveDrawer(){
+  if (drawerBusy) return;
+  const { id, isNew, draft } = drawerState;
+  if (!draft.company || !draft.company.trim()){
+    toast("Укажите название компании");
+    return;
+  }
+  if (isNew){
+    let dups = [];
+    try{
+      dups = findPossibleDuplicates(draft, id);
+    }catch(e){
+      // проверка на дубли — вспомогательная; если она сама сломалась на каких-то
+      // старых данных, это не должно мешать сохранению нового клиента
+      console.error(e);
+    }
+    if (dups.length){
+      const listHtml = dups.slice(0,5).map(d=>
+        `<div class="muted" style="font-size:13px;">— <b>${esc(d.c.company||"—")}</b> (совпадение ${esc(d.reason)}${d.c.code?", код "+esc(d.c.code):""}, менеджер: ${esc(d.c.manager||"—")})</div>`
+      ).join("");
+      const moreHtml = dups.length>5 ? `<div class="muted" style="font-size:12px;">…и ещё ${dups.length-5}</div>` : "";
+      const proceed = await showConfirmModal({
+        title: "Похоже, такой клиент уже есть",
+        bodyHtml: `<div style="display:flex;flex-direction:column;gap:4px;margin:4px 0 8px;">${listHtml}${moreHtml}</div><div class="helptext">Сохранить всё равно, или отменить и проверить карточку?</div>`,
+      });
+      if (!proceed) return;
+    }
+  }
+  await performSaveDrawer();
+}
+
+function formatDbError(e){
+  if (!e) return "неизвестная ошибка";
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message || String(e);
+  return e.message || e.details || e.hint || (e.code ? ("код "+e.code) : "") || "неизвестная ошибка — подробности в логе (кнопка «Лог» в шапке)";
+}
+
+function isTransientNetworkError(e){
+  const msg = String((e && (e.message || e)) || "");
+  return /load failed|failed to fetch|networkerror|network request failed|network connection was lost/i.test(msg);
+}
+function setDrawerButtonsDisabled(disabled){
+  const saveBtn = document.getElementById("btnSave");
+  const delBtn = document.getElementById("btnDelete");
+  if (saveBtn){ saveBtn.disabled = disabled; saveBtn.textContent = disabled ? "Сохраняем…" : "Сохранить"; }
+  if (delBtn){ delBtn.disabled = disabled; }
+}
+
+async function performSaveDrawer(retryCount){
+  retryCount = retryCount || 0;
+  const { id, isNew, draft } = drawerState;
+  draft.updatedAt = nowISO();
+  draft.updatedBy = currentManager() || draft.updatedBy || "";
+  if (!Array.isArray(draft.statusHistory)) draft.statusHistory = [];
+  const manager = currentManager() || "";
+  if (isNew){
+    draft.statusHistory = [{status: draft.status, at: nowISO(), by: manager}];
+  } else {
+    const prev = clients.get(id);
+    const prevStatus = prev ? prev.status : null;
+    if (prevStatus !== draft.status){
+      draft.statusHistory = [...draft.statusHistory, {status: draft.status, at: nowISO(), by: manager}];
+    }
+  }
+  if (!db){ toast("База данных недоступна"); return; }
+  drawerBusy = true;
+  setDrawerButtonsDisabled(true);
+  try{
+    if (isNew){
+      draft.createdAt = nowISO();
+      await db.collection("clients").add(draft);
+      toast("Клиент добавлен");
+    } else {
+      await db.doc("clients/"+id).set(draft);
+      toast("Сохранено");
+    }
+    drawerBusy = false;
+    closeDrawer();
+  }catch(e){
+    console.error(e);
+    if (isTransientNetworkError(e) && retryCount<1){
+      logEvent("retry", "Сетевая ошибка при сохранении — пробуем ещё раз через 1с", e);
+      setTimeout(()=>{ performSaveDrawer(retryCount+1); }, 1000);
+      return; // остаёмся в состоянии "занято" на время повтора
+    }
+    drawerBusy = false;
+    setDrawerButtonsDisabled(false);
+    toast("Ошибка сохранения: "+formatDbError(e));
+  }
+}
+async function deleteDrawer(retryCount){
+  retryCount = retryCount || 0;
+  if (drawerBusy) return;
+  const { id, draft } = drawerState;
+  if (!retryCount && !confirm("Удалить карточку «"+draft.company+"»? Это необратимо.")) return;
+  drawerBusy = true;
+  setDrawerButtonsDisabled(true);
+  try{
+    await db.doc("clients/"+id).delete();
+    toast("Удалено");
+    drawerBusy = false;
+    closeDrawer();
+  }catch(e){
+    console.error(e);
+    if (isTransientNetworkError(e) && retryCount<1){
+      logEvent("retry", "Сетевая ошибка при удалении — пробуем ещё раз через 1с", e);
+      setTimeout(()=>{ deleteDrawer(retryCount+1); }, 1000);
+      return;
+    }
+    drawerBusy = false;
+    setDrawerButtonsDisabled(false);
+    toast("Ошибка удаления: "+formatDbError(e));
+  }
+}
+
+/* =====================================================================
+   AUTH — вход по email/паролю (Supabase Auth), сопоставление с менеджером
+   ===================================================================== */
+async function resolveIdentity(session){
+  const email = session.user.email;
+  const { data, error } = await supabase.from("managers").select("display_name,role").eq("email", email).maybeSingle();
+  if (error || !data){
+    throw new Error("Этот email не найден в списке менеджеров. Обратитесь к администратору.");
+  }
+  CURRENT_USER = { email, displayName: data.display_name, role: data.role };
+  logEvent("auth", "Сессия распознана: "+data.display_name+" ("+data.role+")");
+}
+
+function showLogin(msg){
+  const loginEl = document.getElementById("loginScreen");
+  const appEl = document.getElementById("app");
+  if (loginEl) loginEl.hidden = false;
+  if (appEl) appEl.hidden = true;
+  const err = document.getElementById("loginError");
+  if (err) err.textContent = msg || "";
+}
+
+async function showApp(){
+  document.getElementById("loginScreen").hidden = true;
+  document.getElementById("app").hidden = false;
+  await initDb();
+}
+
+async function boot(){
+  const { data:{ session } } = await supabase.auth.getSession();
+  if (session){
+    try{
+      await resolveIdentity(session);
+      await showApp();
+      return;
+    }catch(e){
+      await supabase.auth.signOut().catch(()=>{});
+      showLogin(e.message);
+      return;
+    }
+  }
+  showLogin();
+}
+
+document.getElementById("loginForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const btn = document.getElementById("loginBtn");
+  const err = document.getElementById("loginError");
+  err.textContent = "";
+  btn.disabled = true; btn.textContent = "Входим…";
+  try{
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await resolveIdentity(data.session);
+    logEvent("auth", "Вход выполнен: "+email);
+    await showApp();
+  }catch(ex){
+    err.textContent = (ex.message==="Invalid login credentials") ? "Неверный email или пароль" : ex.message;
+    logEvent("auth-error", "Ошибка входа для "+email, ex);
+    await supabase.auth.signOut().catch(()=>{});
+  }finally{
+    btn.disabled = false; btn.textContent = "Войти";
+  }
+});
+
+document.getElementById("btnLogout").addEventListener("click", async ()=>{
+  logEvent("auth", "Выход из аккаунта");
+  if (unsub){ try{ unsub(); }catch(e){} }
+  await supabase.auth.signOut();
+  location.reload();
+});
+
+document.getElementById("btnDownloadLog").addEventListener("click", downloadAppLog);
+document.getElementById("btnDownloadLogLogin").addEventListener("click", downloadAppLog);
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+document.addEventListener("keydown", (e)=>{
+  if (e.key!=="Escape") return;
+  const tcm = document.getElementById("tcmBackdrop");
+  if (tcm && !tcm.hidden){ tcm.hidden = true; return; }
+  if (drawerState) closeDrawer();
+});
+boot();
+
+})();
+</script>
+
+</body></html>
