@@ -553,10 +553,11 @@ const STAGES = [
   "9. Ждём решения","10. Пилот / оформление заказа","11. Перезвонить позже",
 ];
 
-const STATUSES = ["Новый","В работе","Не дозвонился","Активен (сделал заказ)","Передан в дивизион","Отказ"];
+const STATUSES = ["Новый","В работе","Не дозвонился","Активен (сделал заказ)","Передан в дивизион","Отказ","Конечный заказчик"];
 const STATUS_STYLE = {
   "Новый":"neutral","В работе":"info","Не дозвонился":"warn",
   "Активен (сделал заказ)":"good","Передан в дивизион":"violet","Отказ":"bad",
+  "Конечный заказчик":"info",
 };
 
 const REJECTION_REASONS = [
@@ -971,7 +972,7 @@ function matchesFilters(c){
   }
   if (filters.search){
     const q = filters.search.toLowerCase();
-    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")).toLowerCase();
+    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")).toLowerCase();
     if (!hay.includes(q)) return false;
   }
   if (filters.regDateFrom || filters.regDateTo){
@@ -1065,7 +1066,7 @@ function renderList(){
 
   const toolbarHtml = `
     <div class="toolbar">
-      <input type="text" id="fSearch" placeholder="Поиск: компания, код, контакт, регион, email…" value="${esc(filters.search)}"/>
+      <input type="text" id="fSearch" placeholder="Поиск: компания, код, контакт, регион, email, менеджер…" value="${esc(filters.search)}"/>
       <select id="fManager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m=>`<option value="${esc(m)}" ${filters.manager===m?"selected":""}>${esc(m)}</option>`).join("")}
