@@ -971,7 +971,7 @@ function matchesFilters(c){
   }
   if (filters.search){
     const q = filters.search.toLowerCase();
-    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")).toLowerCase();
+    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")).toLowerCase();
     if (!hay.includes(q)) return false;
   }
   if (filters.regDateFrom || filters.regDateTo){
@@ -1065,7 +1065,7 @@ function renderList(){
 
   const toolbarHtml = `
     <div class="toolbar">
-      <input type="text" id="fSearch" placeholder="Поиск: компания, код, контакт, регион…" value="${esc(filters.search)}"/>
+      <input type="text" id="fSearch" placeholder="Поиск: компания, код, контакт, регион, email…" value="${esc(filters.search)}"/>
       <select id="fManager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m=>`<option value="${esc(m)}" ${filters.manager===m?"selected":""}>${esc(m)}</option>`).join("")}
