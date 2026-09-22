@@ -1354,6 +1354,13 @@ function renderTransfer(){
       <button class="btn subtle" id="btnExportTransfer" ${filtered.length===0?"disabled":""}>⬇ Excel (${filtered.length})</button>
     </div>`;
 
+  const totalShipSum = filtered.reduce((acc,[,c])=> acc + clientShipmentTotal(c).sum, 0);
+  const statsHtml = `
+    <div class="stats" style="margin-top:10px;">
+      <div class="stat"><b>${filtered.length}</b><span>${transferManagerFilter==="all"?"клиентов передаётся":"клиентов у "+transferManagerFilter}</span></div>
+      <div class="stat"><b>${fmtMoney(totalShipSum)}</b><span>сумма отгрузки</span></div>
+    </div>`;
+
   const bulkBarHtml = filtered.length===0 ? "" : `
     <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;">
       <label class="checkline" style="margin:0;"><input type="checkbox" id="chkSelectAllTransfer" ${filtered.every(([id])=>transferSelected.has(id))?"checked":""}/> Выбрать все на странице (${filtered.length})</label>
@@ -1392,7 +1399,7 @@ function renderTransfer(){
     </div></div>`;
   })();
 
-  main.innerHTML = intro + toolbarHtml + bulkBarHtml + readyBlock;
+  main.innerHTML = intro + toolbarHtml + statsHtml + bulkBarHtml + readyBlock;
 
   main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = (e)=>{
     if (e.target.closest(".chkTransfer")) return;
