@@ -263,6 +263,20 @@
   .add-contact-btn:hover{border-color:var(--accent); background:var(--accent-weak);}
   .primary-star{color:var(--warn); font-size:13px;}
 
+  /* ---------- notes feed (client card) ---------- */
+  .notes-feed{display:flex; flex-direction:column; gap:10px;}
+  .notes-add{display:flex; flex-direction:column; gap:6px;}
+  .notes-add textarea{
+    width:100%; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:13.5px; font-family:inherit; resize:vertical; min-height:44px;
+  }
+  .notes-add .btn{align-self:flex-start;}
+  .notes-list{display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto;}
+  .note-item{background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 11px;}
+  .note-item-head{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--text-faint); margin-bottom:4px;}
+  .note-item .note-by{font-weight:600; color:var(--text-muted);}
+  .note-text{font-size:13px; white-space:pre-wrap; word-break:break-word;}
+
   .checkline{display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:6px 0;}
   .checkline input{margin-top:3px; flex:none;}
   .banner{
@@ -978,6 +992,13 @@ function normalizeClient(data){
       data.contacts = [];
     }
   }
+  if (!Array.isArray(data.changeLog)) data.changeLog = [];
+  // старые карточки хранят единственное поле "следующий шаг" — переносим его
+  // в ленту заметок одной первой записью, чтобы не потерять то, что уже написано
+  if (!Array.isArray(data.notes)) data.notes = [];
+  if (data.notes.length===0 && data.nextStep){
+    data.notes = [{ text: data.nextStep, at: data.updatedAt || data.createdAt || nowISO(), by: data.updatedBy || "" }];
+  }
   return data;
 }
 function syncPrimaryContactMirror(draft){
@@ -994,6 +1015,11 @@ function extraContactsText(c){
     const parts = [ct.name||"", ct.role?("("+ct.role+")"):"", ct.email||"", ct.phone||""].filter(Boolean);
     return parts.join(", ");
   }).join("; ");
+}
+// Короткая читаемая сводка по списку контактов — для сравнения "было/стало" в истории изменений
+function contactsSummary(contacts){
+  if (!contacts || !contacts.length) return "—";
+  return contacts.map(ct=> ct.name || ct.email || ct.phone || "(без имени)").join("; ");
 }
 // Сумма/кол-во отгрузок клиента — суммируем по всем загруженным периодам
 // вкладки «Отгрузки» (таблица shipments), сопоставляя по коду клиента (1С).
@@ -1743,6 +1769,23 @@ function computeMonthlyRegistrations(source){
   });
 }
 
+function computeMonthlyTransfers(source){
+  const map = new Map();
+  source.forEach(c=>{
+    if (c.status!=="Передан в дивизион") return;
+    const td = c.transferDate;
+    if (!td || !/^\d{4}-\d{2}/.test(td)) return;
+    const key = td.slice(0,7);
+    map.set(key, (map.get(key)||0)+1);
+  });
+  const keys = Array.from(map.keys()).sort();
+  const last = keys.slice(-12);
+  return last.map(k=>{
+    const [y,m] = k.split("-").map(Number);
+    return {label: `${KPI_MONTH_NAMES_RU[m-1]} ${String(y).slice(2)}`, value: map.get(k), key:k};
+  });
+}
+
 function computeManagerConversionChart(perManager){
   return perManager
     .filter(r=>r.totalStats.total>0)
@@ -1819,8 +1862,59 @@ function buildKpiBarChart(data, opts){
   return svg;
 }
 
+// Линейный график — для трендов во времени (месяц к месяцу), тот же формат
+// data/opts, что и у buildKpiBarChart, и те же классы у точек (kpi-bar-g/kpi-bar-hit),
+// поэтому подсказка (wireKpiChart) работает без изменений для обоих типов графиков.
+function buildKpiLineChart(data, opts){
+  opts = opts||{};
+  const colorVar = opts.colorVar || "--accent";
+  const valueFmt = opts.valueFmt || (v=>String(Math.round(v)));
+  const tickFmt = opts.tickFmt || (v=>String(Math.round(v)));
+  const width = 560, height = opts.height || 220;
+  const pad = {top:18, right:14, bottom:28, left:34};
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const maxDataVal = Math.max(0, ...data.map(d=>d.value));
+  const {axisMax, step} = niceAxisStep(maxDataVal);
+  const n = data.length;
+  const xOf = i => n>1 ? pad.left + (innerW/(n-1))*i : pad.left + innerW/2;
+  const yOf = v => pad.top + innerH - (axisMax>0 ? (v/axisMax)*innerH : 0);
+
+  const yTicks = [];
+  for (let v=0; v<=axisMax+1e-9; v+=step) yTicks.push(v);
+  const gridSvg = yTicks.map(v=>{
+    const yy = yOf(v);
+    return `<line x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+      + `<text x="${(pad.left-7).toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--text-faint)">${esc(tickFmt(v))}</text>`;
+  }).join("");
+
+  const linePoints = data.map((d,i)=> `${xOf(i).toFixed(1)},${yOf(d.value).toFixed(1)}`).join(" ");
+
+  const pointsSvg = data.map((d,i)=>{
+    const cx = xOf(i), cy = yOf(d.value);
+    const valueLabelY = Math.max(pad.top+9, cy-10);
+    return `<g class="kpi-bar-g" tabindex="0" data-idx="${i}">
+      <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="var(${colorVar})" class="kpi-bar-rect"/>
+      <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="14" fill="transparent" class="kpi-bar-hit" data-idx="${i}"/>
+      <text x="${cx.toFixed(1)}" y="${valueLabelY.toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${esc(valueFmt(d.value))}</text>
+      <text x="${cx.toFixed(1)}" y="${(pad.top+innerH+15).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${esc(d.label.length>10? d.label.slice(0,9)+"…" : d.label)}</text>
+    </g>`;
+  }).join("");
+
+  const svg = `<svg viewBox="0 0 ${width} ${height}" class="kpi-chart-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="диаграмма">
+    ${gridSvg}
+    <line x1="${pad.left}" y1="${(pad.top+innerH).toFixed(1)}" x2="${(pad.left+innerW).toFixed(1)}" y2="${(pad.top+innerH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+    <polyline points="${linePoints}" fill="none" stroke="var(${colorVar})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pointsSvg}
+  </svg>`;
+  return svg;
+}
+
 function buildKpiChartCard(opts){
-  // opts: {id, title, data, colorVar, valueFmt, tickFmt, tooltipFmt(d), tableHead, tableRow(d)}
+  // opts: {id, title, data, colorVar, valueFmt, tickFmt, tooltipFmt(d), tableHead, tableRow(d), chartFn}
+  // chartFn — buildKpiBarChart (по умолчанию, для сравнения по категориям) или
+  // buildKpiLineChart (для трендов по месяцам) — оба рисуют в одном формате точек,
+  // так что подсказка и переключатель "Таблица" работают одинаково для обоих.
   const {id, title, data} = opts;
   if (!data.length){
     return `<div class="chart-card">
@@ -1828,7 +1922,8 @@ function buildKpiChartCard(opts){
       <div class="chart-empty">Нет данных за выбранный период</div>
     </div>`;
   }
-  const svg = buildKpiBarChart(data, opts);
+  const chartFn = opts.chartFn || buildKpiBarChart;
+  const svg = chartFn(data, opts);
   const rows = data.map(opts.tableRow).join("");
   return `<div class="chart-card" data-chart-id="${id}">
     <div class="chart-card-head">
@@ -1888,13 +1983,21 @@ function renderKpi(){
   const subCells = buckets.map(()=>`<th>Всего</th><th>Заказ</th><th>Конв.</th>`).join("");
 
   const monthlyRegData = computeMonthlyRegistrations(source);
+  const monthlyTransferData = computeMonthlyTransfers(source);
   const managerConvData = computeManagerConversionChart(perManager);
 
   const monthlyChartHtml = buildKpiChartCard({
     id:"monthly", title:"Новые клиенты по месяцам (дата регистрации)",
-    data: monthlyRegData, colorVar:"--accent",
+    data: monthlyRegData, colorVar:"--accent", chartFn: buildKpiLineChart,
     valueFmt: v=>String(v), tickFmt: v=>String(Math.round(v)),
     tableHead: `<th style="width:55%;">Месяц</th><th>Новых клиентов</th>`,
+    tableRow: d=>`<tr><td>${esc(d.label)}</td><td>${d.value}</td></tr>`
+  });
+  const transferChartHtml = buildKpiChartCard({
+    id:"monthlytransfer", title:"Передано в дивизион по месяцам (дата передачи)",
+    data: monthlyTransferData, colorVar:"--violet", chartFn: buildKpiLineChart,
+    valueFmt: v=>String(v), tickFmt: v=>String(Math.round(v)),
+    tableHead: `<th style="width:55%;">Месяц</th><th>Передано клиентов</th>`,
     tableRow: d=>`<tr><td>${esc(d.label)}</td><td>${d.value}</td></tr>`
   });
   const convChartHtml = buildKpiChartCard({
@@ -1948,6 +2051,7 @@ function renderKpi(){
       <div class="helptext" style="margin-top:10px;">«Заказ» считается по статусу «Активен (сделал заказ)» или «Передан в дивизион». Обновляйте статус по факту первой отгрузки, чтобы конверсия считалась верно. Период фильтрует по дате регистрации партнёра; клиенты без даты регистрации при выбранном периоде не учитываются.</div>
       <div class="kpi-charts-grid">
         ${monthlyChartHtml}
+        ${transferChartHtml}
         ${convChartHtml}
       </div>
     </div>
@@ -1970,6 +2074,9 @@ function renderKpi(){
   if (kpiTooltip){
     if (monthlyRegData.length){
       wireKpiChart("monthly", monthlyRegData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${esc(String(d.value))} нов. клиентов</div>`, kpiTooltip);
+    }
+    if (monthlyTransferData.length){
+      wireKpiChart("monthlytransfer", monthlyTransferData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${esc(String(d.value))} передано в дивизион</div>`, kpiTooltip);
     }
     if (managerConvData.length){
       wireKpiChart("convmgr", managerConvData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${d.value.toFixed(0)}% (${d.done} из ${d.total})</div>`, kpiTooltip);
@@ -2395,10 +2502,11 @@ function blankClient(tab){
     stage:"1. Квалификация", status:"Новый", rejectionReason:null, rejectionReasonOther:"",
     lastContactDate:null, nextStep:"", region:"", contactPerson:"", email:"", phone:"", website:"",
     contacts:[{name:"",role:"",email:"",phone:""}],
+    notes:[],
     counterpartyStatusRef:"", revenue2025:null, transferDate:null,
     handover:{agreements:"",nextOrders:"",openQuestions:""},
     createdAt: nowISO(), updatedAt: nowISO(), updatedBy: wm, importNote:"",
-    statusHistory: [],
+    statusHistory: [], changeLog: [],
   };
 }
 
@@ -2572,7 +2680,22 @@ function renderDrawerBody(){
           <input type="date" id="f_transferdate" value="${esc(draft.transferDate||"")}"/>
           <div class="helptext">От этой даты считаем 3 месяца, в течение которых менеджеру идёт процент.</div>
         </div>
-        <div class="full"><label class="lbl">Следующий шаг / комментарий</label><textarea id="f_nextstep">${esc(draft.nextStep)}</textarea></div>
+        <div class="full">
+          <label class="lbl">Следующий шаг / комментарий</label>
+          <div class="notes-feed">
+            <div class="notes-add">
+              <textarea id="f_newnote" placeholder="Например: жду КП, звонок во вторник…"></textarea>
+              <button type="button" class="btn sm" id="btnAddNote">Добавить заметку</button>
+            </div>
+            <div class="notes-list">
+              ${(draft.notes && draft.notes.length) ? draft.notes.slice().reverse().map(n=>`
+                <div class="note-item">
+                  <div class="note-item-head"><span class="note-date">${fmtDateTime(n.at)}</span><span class="note-by">${esc(n.by||"—")}</span></div>
+                  <div class="note-text">${esc(n.text)}</div>
+                </div>`).join("") : `<div class="helptext">Пока нет заметок.</div>`}
+            </div>
+          </div>
+        </div>
       </div>
       <div id="commissionBanner">${commissionBannerHtml(draft)}</div>
       <div class="readonlybadges" style="margin-top:10px;">
@@ -2588,6 +2711,16 @@ function renderDrawerBody(){
         ${(!draft.statusHistory || draft.statusHistory.length===0) ? `<div class="helptext" style="margin-top:6px;">Пока нет записей — появятся после сохранения смены статуса.</div>` : `
         <table>
           ${draft.statusHistory.slice().reverse().map(h=>`<tr><td><span class="pill ${STATUS_STYLE[h.status]||"neutral"}">${esc(h.status||"—")}</span></td><td class="muted">${fmtDateTime(h.at)}</td><td class="muted">${esc(h.by||"—")}</td></tr>`).join("")}
+        </table>`}
+      </details>
+    </div>
+
+    <div>
+      <details class="legend">
+        <summary>История изменений ${(draft.changeLog&&draft.changeLog.length) ? "("+draft.changeLog.length+")" : ""}</summary>
+        ${(!draft.changeLog || draft.changeLog.length===0) ? `<div class="helptext" style="margin-top:6px;">Пока нет записей — появятся при изменении отрасли, менеджера или контактов.</div>` : `
+        <table>
+          ${draft.changeLog.slice().reverse().map(h=>`<tr><td class="muted">${esc(h.field||"—")}</td><td class="muted">${esc(h.from||"—")} → ${esc(h.to||"—")}</td><td class="muted">${fmtDateTime(h.at)}</td><td class="muted">${esc(h.by||"—")}</td></tr>`).join("")}
         </table>`}
       </details>
     </div>
@@ -2648,7 +2781,6 @@ function wireDrawerInputs(){
   bind("f_stage","stage", v=>v||null);
   bind("f_lastcontact","lastContactDate", v=>v||null);
   bind("f_transferdate","transferDate", v=>v||null);
-  bind("f_nextstep","nextStep");
   bind("f_revenue","revenue2025", v=>v===""?null:Number(v));
   bind("f_agreements","handover.agreements");
   bind("f_nextorders","handover.nextOrders");
@@ -2682,6 +2814,17 @@ function wireDrawerInputs(){
   if (btnAddContact) btnAddContact.addEventListener("click", ()=>{
     if (!Array.isArray(draft.contacts)) draft.contacts = [];
     draft.contacts.push({name:"",role:"",email:"",phone:""});
+    renderDrawerBody();
+  });
+
+  const btnAddNote = document.getElementById("btnAddNote");
+  if (btnAddNote) btnAddNote.addEventListener("click", ()=>{
+    const noteInput = document.getElementById("f_newnote");
+    const text = (noteInput && noteInput.value || "").trim();
+    if (!text) return;
+    if (!Array.isArray(draft.notes)) draft.notes = [];
+    draft.notes.push({ text, at: nowISO(), by: currentManager() || "" });
+    draft.nextStep = text; // "зеркало" последней заметки — для списков и выгрузок, которые ещё смотрят на nextStep
     renderDrawerBody();
   });
   const statusSel = document.getElementById("f_status");
@@ -2770,6 +2913,7 @@ async function performSaveDrawer(retryCount){
   draft.updatedAt = nowISO();
   draft.updatedBy = currentManager() || draft.updatedBy || "";
   if (!Array.isArray(draft.statusHistory)) draft.statusHistory = [];
+  if (!Array.isArray(draft.changeLog)) draft.changeLog = [];
   const manager = currentManager() || "";
   if (isNew){
     draft.statusHistory = [{status: draft.status, at: nowISO(), by: manager}];
@@ -2778,6 +2922,26 @@ async function performSaveDrawer(retryCount){
     const prevStatus = prev ? prev.status : null;
     if (prevStatus !== draft.status){
       draft.statusHistory = [...draft.statusHistory, {status: draft.status, at: nowISO(), by: manager}];
+    }
+    if (prev){
+      // логируем правки важных полей — отдельно от истории статусов, т.к. именно
+      // смена отрасли уже один раз "тихо" разошлась со вкладкой «Отгрузки»
+      const changes = [];
+      if ((prev.industry||"") !== (draft.industry||"")){
+        changes.push({field:"Отрасль", from: prev.industry||"—", to: draft.industry||"—"});
+      }
+      if ((prev.manager||"") !== (draft.manager||"")){
+        changes.push({field:"Менеджер", from: prev.manager||"—", to: draft.manager||"—"});
+      }
+      const prevContactsStr = contactsSummary(prev.contacts);
+      const draftContactsStr = contactsSummary(draft.contacts);
+      if (prevContactsStr !== draftContactsStr){
+        changes.push({field:"Контакты", from: prevContactsStr, to: draftContactsStr});
+      }
+      if (changes.length){
+        const at = nowISO();
+        draft.changeLog = [...draft.changeLog, ...changes.map(c=>({...c, at, by: manager}))];
+      }
     }
   }
   if (!db){ toast("База данных недоступна"); return; }
