@@ -239,6 +239,30 @@
     width:100%; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13.5px;
   }
   .field-grid textarea{resize:vertical; min-height:52px; font-family:inherit;}
+
+  /* ---------- contacts list (client card) ---------- */
+  .contacts-list{display:flex; flex-direction:column; gap:10px;}
+  .contact-card{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:12px; display:flex; flex-direction:column; gap:10px; position:relative;
+  }
+  .contact-card-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .contact-card-head .who{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-muted); font-weight:600;}
+  .contact-remove{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; padding:0; border:none; border-radius:6px;
+    background:transparent; color:var(--text-faint); font-size:15px; line-height:1; cursor:pointer;
+  }
+  .contact-remove:hover{background:var(--bad-weak); color:var(--bad);}
+  .contact-card .field-grid{gap:8px 10px;}
+  .contact-card input[type=text]{background:var(--surface);}
+  .add-contact-btn{
+    align-self:flex-start; background:transparent; border:1px dashed var(--border); color:var(--accent-strong);
+    padding:9px 14px; border-radius:var(--radius-sm); cursor:pointer; font-weight:700; font-size:13px;
+  }
+  .add-contact-btn:hover{border-color:var(--accent); background:var(--accent-weak);}
+  .primary-star{color:var(--warn); font-size:13px;}
+
   .checkline{display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:6px 0;}
   .checkline input{margin-top:3px; flex:none;}
   .banner{
@@ -940,11 +964,41 @@ function makeSupabaseDb(){
   };
 }
 
+function normalizeClient(data){
+  // старые карточки хранят одно контактное лицо в contactPerson/email/phone —
+  // приводим их к массиву contacts, ничего не удаляя (эти поля остаются как
+  // "зеркало" первого/основного контакта для старого кода — экспорт, поиск дублей и т.д.)
+  if (!data) return data;
+  if (!Array.isArray(data.contacts) || data.contacts.length===0){
+    if (data.contactPerson || data.email || data.phone){
+      data.contacts = [{ name: data.contactPerson||"", role:"", email: data.email||"", phone: data.phone||"" }];
+    } else {
+      data.contacts = [];
+    }
+  }
+  return data;
+}
+function syncPrimaryContactMirror(draft){
+  const c0 = (draft.contacts && draft.contacts[0]) || {};
+  draft.contactPerson = c0.name || "";
+  draft.email = c0.email || "";
+  draft.phone = c0.phone || "";
+}
+function extraContactsText(c){
+  // все контакты, кроме основного (первого) — для выгрузок в Excel
+  const list = (c.contacts||[]).slice(1);
+  if (!list.length) return "";
+  return list.map(ct=>{
+    const parts = [ct.name||"", ct.role?("("+ct.role+")"):"", ct.email||"", ct.phone||""].filter(Boolean);
+    return parts.join(", ");
+  }).join("; ");
+}
+
 async function initDb(){
   db = makeSupabaseDb();
   unsub = db.collection("clients").onSnapshot(snap=>{
     clients.clear();
-    snap.docs.forEach(d=>{ if(d.exists) clients.set(d.id, d.data()); });
+    snap.docs.forEach(d=>{ if(d.exists) clients.set(d.id, normalizeClient(d.data())); });
     renderShell();
   }, err=>{
     console.error("db error", err);
@@ -1020,7 +1074,8 @@ function matchesFilters(c){
   }
   if (filters.search){
     const q = filters.search.toLowerCase();
-    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")).toLowerCase();
+    const contactsHay = (c.contacts||[]).map(ct=>(ct.name||"")+" "+(ct.email||"")+" "+(ct.phone||"")).join(" ");
+    const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")+" "+contactsHay).toLowerCase();
     if (!hay.includes(q)) return false;
   }
   if (filters.regDateFrom || filters.regDateTo){
@@ -2073,7 +2128,7 @@ async function downloadKpiExcel(){
   // Лист 3 — «Передача в дивизион» (готовы к передаче, как во вкладке)
   const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
   ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
-  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
+  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
   ready.forEach(([,c])=>{
     const h = c.handover||{};
     const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
@@ -2087,6 +2142,7 @@ async function downloadKpiExcel(){
       {val:c.contactPerson||""},
       {val:c.phone||""},
       {val:c.email||""},
+      {val:extraContactsText(c)},
       {val:c.nextStep||""},
       {val:fmtDate(c.lastContactDate)},
       {val: filled ? "заполнено" : "нужно заполнить"},
@@ -2142,7 +2198,7 @@ async function downloadKpiExcel(){
 async function downloadListExcel(rowsClients){
   const btn = document.getElementById("btnExportList");
 
-  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
+  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Доп. контакты","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -2162,6 +2218,7 @@ async function downloadListExcel(rowsClients){
       {val:c.contactPerson||""},
       {val:c.phone||""},
       {val:c.email||""},
+      {val:extraContactsText(c)},
       {val:fmtDate(c.registrationDate)},
       {val:fmtDate(c.lastContactDate)},
       {val: days!=null?days:"", type: days!=null?"Number":"String"},
@@ -2212,6 +2269,7 @@ function blankClient(tab){
     engagement:{responded:false,hadCall:false,requestedKp:false},
     stage:"1. Квалификация", status:"Новый", rejectionReason:null, rejectionReasonOther:"",
     lastContactDate:null, nextStep:"", region:"", contactPerson:"", email:"", phone:"", website:"",
+    contacts:[{name:"",role:"",email:"",phone:""}],
     counterpartyStatusRef:"", revenue2025:null, transferDate:null,
     handover:{agreements:"",nextOrders:"",openQuestions:""},
     createdAt: nowISO(), updatedAt: nowISO(), updatedBy: wm, importNote:"",
@@ -2296,11 +2354,27 @@ function renderDrawerBody(){
             <option value="outgoing" ${draft.source==="outgoing"?"selected":""}>Исходящий (менеджер нашёл сам)</option>
           </select></div>` : `<div><label class="lbl">Вкладка</label><input type="text" value="Спящие клиенты (из общей базы)" disabled/></div>`}
         <div><label class="lbl">Регион</label><input type="text" id="f_region" value="${esc(draft.region)}"/></div>
-        <div><label class="lbl">Контактное лицо</label><input type="text" id="f_contact" value="${esc(draft.contactPerson)}"/></div>
-        <div><label class="lbl">Email</label><input type="text" id="f_email" value="${esc(draft.email)}"/></div>
-        <div><label class="lbl">Телефон</label><input type="text" id="f_phone" value="${esc(draft.phone)}"/></div>
         <div><label class="lbl">Сайт</label><input type="text" id="f_site" value="${esc(draft.website)}"/></div>
         <div><label class="lbl">Статус контрагента (справочно)</label><input type="text" id="f_counterparty" value="${esc(draft.counterpartyStatusRef)}"/></div>
+        <div class="full">
+          <label class="lbl" style="margin-bottom:8px;">Контакты</label>
+          <div class="contacts-list" id="contactsList">
+            ${(draft.contacts&&draft.contacts.length?draft.contacts:[{name:"",role:"",email:"",phone:""}]).map((ct,i)=>`
+              <div class="contact-card" data-idx="${i}">
+                <div class="contact-card-head">
+                  <div class="who">${i===0?'<span class="primary-star">★</span> Основной контакт':'Контакт '+(i+1)}</div>
+                  ${i>0?`<button type="button" class="contact-remove" data-remove-contact="${i}" title="Удалить контакт">✕</button>`:""}
+                </div>
+                <div class="field-grid">
+                  <div><label class="lbl">Имя</label><input type="text" data-contact-field="name" data-idx="${i}" value="${esc(ct.name||"")}"/></div>
+                  <div><label class="lbl">Роль / комментарий</label><input type="text" data-contact-field="role" data-idx="${i}" value="${esc(ct.role||"")}"/></div>
+                  <div><label class="lbl">Email</label><input type="text" data-contact-field="email" data-idx="${i}" value="${esc(ct.email||"")}"/></div>
+                  <div><label class="lbl">Телефон</label><input type="text" data-contact-field="phone" data-idx="${i}" value="${esc(ct.phone||"")}"/></div>
+                </div>
+              </div>`).join("")}
+            <button type="button" class="add-contact-btn" id="btnAddContact">+ Добавить контакт</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2440,9 +2514,6 @@ function wireDrawerInputs(){
   bind("f_regdate","registrationDate");
   bind("f_source","source");
   bind("f_region","region");
-  bind("f_contact","contactPerson");
-  bind("f_email","email");
-  bind("f_phone","phone");
   bind("f_site","website");
   bind("f_counterparty","counterpartyStatusRef");
   bind("f_industry","industry", v=>v||null);
@@ -2461,6 +2532,32 @@ function wireDrawerInputs(){
 
   document.querySelectorAll("[data-eng]").forEach(el=>{
     el.addEventListener("change", ()=>{ draft.engagement[el.getAttribute("data-eng")] = el.checked; onDraftChanged(); });
+  });
+
+  if (!Array.isArray(draft.contacts) || draft.contacts.length===0) draft.contacts = [{name:"",role:"",email:"",phone:""}];
+  document.querySelectorAll("[data-contact-field]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const idx = Number(el.getAttribute("data-idx"));
+      const field = el.getAttribute("data-contact-field");
+      if (!draft.contacts[idx]) draft.contacts[idx] = {name:"",role:"",email:"",phone:""};
+      draft.contacts[idx][field] = el.value;
+      syncPrimaryContactMirror(draft);
+      onDraftChanged();
+    });
+  });
+  document.querySelectorAll("[data-remove-contact]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const idx = Number(el.getAttribute("data-remove-contact"));
+      draft.contacts.splice(idx,1);
+      syncPrimaryContactMirror(draft);
+      renderDrawerBody();
+    });
+  });
+  const btnAddContact = document.getElementById("btnAddContact");
+  if (btnAddContact) btnAddContact.addEventListener("click", ()=>{
+    if (!Array.isArray(draft.contacts)) draft.contacts = [];
+    draft.contacts.push({name:"",role:"",email:"",phone:""});
+    renderDrawerBody();
   });
   const statusSel = document.getElementById("f_status");
   if (statusSel) statusSel.addEventListener("change", ()=>{
