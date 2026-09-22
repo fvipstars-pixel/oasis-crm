@@ -1798,6 +1798,40 @@ function computeManagerConversionChart(perManager){
     .sort((a,b)=>b.value-a.value);
 }
 
+// Сколько клиентов попадает в каждый сегмент (A/B/C/D) — цвет каждого столбца
+// совпадает с цветом таких же плашек-сегментов в списке и карточке клиента.
+function computeSegmentBreakdown(source){
+  const defs = [
+    {code:"A", colorVar:"--good"},
+    {code:"B", colorVar:"--info"},
+    {code:"C", colorVar:"--warn"},
+    {code:"D", colorVar:"--neutral"},
+  ];
+  const counts = {A:0,B:0,C:0,D:0};
+  const labels = {};
+  source.forEach(c=>{
+    const seg = computeScores(c).segment;
+    if (seg && counts[seg.code]!=null){ counts[seg.code]++; labels[seg.code]=seg.label; }
+  });
+  return defs.map(d=>({label:d.code, value:counts[d.code], segLabel: labels[d.code]||"", colorVar:d.colorVar}));
+}
+
+// Сколько клиентов в каждом виде деятельности (отрасли), по убыванию, с пометкой
+// дивизиона (Стандарт/Нестандарт) — та же логика, что определяет дивизион в карточке клиента.
+function computeIndustryBreakdown(source){
+  const map = new Map();
+  source.forEach(c=>{
+    const industry = c.industry || "Не указано";
+    map.set(industry, (map.get(industry)||0)+1);
+  });
+  const rows = Array.from(map.entries()).map(([industry,count])=>{
+    const division = (INDUSTRY_MAP.get(industry) || {division:"Стандарт"}).division;
+    return {industry, count, division};
+  });
+  rows.sort((a,b)=> b.count-a.count || a.industry.localeCompare(b.industry,"ru"));
+  return rows;
+}
+
 function niceAxisStep(maxVal){
   if (maxVal<=0) return {axisMax:1, step:1};
   const rough = maxVal/4;
@@ -1852,7 +1886,7 @@ function buildKpiBarChart(data, opts){
     const path = roundedTopBarPath(x, yTop, barW, barH, 4);
     const valueLabelY = Math.max(pad.top+9, yTop-6);
     return `<g class="kpi-bar-g" tabindex="0" data-idx="${i}">
-      <path d="${path}" fill="var(${colorVar})" class="kpi-bar-rect"/>
+      <path d="${path}" fill="var(${d.colorVar || colorVar})" class="kpi-bar-rect"/>
       <rect x="${(x-6).toFixed(1)}" y="${pad.top}" width="${(barW+12).toFixed(1)}" height="${innerH}" fill="transparent" class="kpi-bar-hit" data-idx="${i}"/>
       <text x="${cx.toFixed(1)}" y="${valueLabelY.toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${esc(valueFmt(d.value))}</text>
       <text x="${cx.toFixed(1)}" y="${(pad.top+innerH+15).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${esc(d.label.length>10? d.label.slice(0,9)+"…" : d.label)}</text>
@@ -1990,6 +2024,8 @@ function renderKpi(){
   const monthlyRegData = computeMonthlyRegistrations(source);
   const monthlyTransferData = computeMonthlyTransfers(source);
   const managerConvData = computeManagerConversionChart(perManager);
+  const segmentData = computeSegmentBreakdown(source);
+  const industryData = computeIndustryBreakdown(source);
 
   const monthlyChartHtml = buildKpiChartCard({
     id:"monthly", title:"Новые клиенты по месяцам (дата регистрации)",
@@ -2012,6 +2048,32 @@ function renderKpi(){
     tableHead: `<th style="width:40%;">Менеджер</th><th>Заявок</th><th>Заказов</th><th>Конв.</th>`,
     tableRow: d=>`<tr><td title="${esc(d.label)}">${esc(d.label)}</td><td>${d.total}</td><td>${d.done}</td><td>${d.value.toFixed(0)}%</td></tr>`
   });
+  const segmentChartHtml = buildKpiChartCard({
+    id:"segments", title:"Клиенты по сегментам",
+    data: segmentData, colorVar:"--accent",
+    valueFmt: v=>String(v), tickFmt: v=>String(Math.round(v)),
+    tableHead: `<th style="width:55%;">Сегмент</th><th>Клиентов</th>`,
+    tableRow: d=>`<tr><td>${esc(d.label)}${d.segLabel?" — "+esc(d.segLabel):""}</td><td>${d.value}</td></tr>`
+  });
+
+  const industryTotal = industryData.reduce((acc,r)=>acc+r.count,0);
+  const industryTableHtml = industryData.length===0 ? "" : `
+    <div class="chart-card" style="flex:1 1 100%;">
+      <div class="chart-card-head"><h3>Клиенты по видам деятельности — по убыванию</h3></div>
+      <div class="tscroll" style="max-height:420px;">
+        <table class="kpi">
+          <thead><tr><th>Отрасль</th><th>Клиентов</th><th>Доля</th><th>Дивизион</th></tr></thead>
+          <tbody>
+            ${industryData.map(r=>`<tr>
+              <td>${esc(r.industry)}</td>
+              <td class="mono">${r.count}</td>
+              <td class="mono">${industryTotal? (r.count/industryTotal*100).toFixed(0):0}%</td>
+              <td><span class="pill ${r.division==="Стандарт"?"info":"violet"}">${esc(r.division)}</span></td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 
   function rowCells(r){
     return buckets.map(b=>{
@@ -2058,6 +2120,8 @@ function renderKpi(){
         ${monthlyChartHtml}
         ${transferChartHtml}
         ${convChartHtml}
+        ${segmentChartHtml}
+        ${industryTableHtml}
       </div>
     </div>
     <div class="kpi-tooltip" id="kpiTooltip"></div>`;
@@ -2085,6 +2149,9 @@ function renderKpi(){
     }
     if (managerConvData.length){
       wireKpiChart("convmgr", managerConvData, d=>`<div class="tt-label">${esc(d.label)}</div><div class="tt-value">${d.value.toFixed(0)}% (${d.done} из ${d.total})</div>`, kpiTooltip);
+    }
+    if (segmentData.length){
+      wireKpiChart("segments", segmentData, d=>`<div class="tt-label">${esc(d.label)}${d.segLabel?" — "+esc(d.segLabel):""}</div><div class="tt-value">${esc(String(d.value))} клиентов</div>`, kpiTooltip);
     }
   }
 }
