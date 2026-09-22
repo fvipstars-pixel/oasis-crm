@@ -728,6 +728,8 @@ let drawerState = null; // {id, isNew, draft}
 let drawerBusy = false; // защита от повторной отправки (двойной клик/дребезг мыши, гонки сети)
 const transferSelected = new Set(); // id-ы, отмеченные для массовой передачи в дивизион
 let bulkTransferDate = todayISO();
+let transferSearch = "";
+let transferManagerFilter = "all";
 
 function uid(){ return "m"+Math.random().toString(36).slice(2,9); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -992,6 +994,16 @@ function extraContactsText(c){
     const parts = [ct.name||"", ct.role?("("+ct.role+")"):"", ct.email||"", ct.phone||""].filter(Boolean);
     return parts.join(", ");
   }).join("; ");
+}
+// Сумма/кол-во отгрузок клиента — суммируем по всем загруженным периодам
+// вкладки «Отгрузки» (таблица shipments), сопоставляя по коду клиента (1С).
+function clientShipmentTotal(c){
+  if (!c.code) return {sum:0, count:0};
+  let sum=0, count=0;
+  shipments.forEach(s=>{
+    if (s.client_code===c.code){ sum += Number(s.order_sum)||0; count += Number(s.order_count)||0; }
+  });
+  return {sum, count};
 }
 
 async function initDb(){
@@ -1297,11 +1309,30 @@ function openNewClientFlow(){
    ===================================================================== */
 function renderTransfer(){
   const main = document.getElementById("main");
+  const focusInfo = (()=>{
+    const el = document.activeElement;
+    if (el && el.id && main.contains(el)){
+      return { id: el.id, start: el.selectionStart, end: el.selectionEnd };
+    }
+    return null;
+  })();
   const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
   ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
 
   const readyIds = new Set(ready.map(([id])=>id));
   Array.from(transferSelected).forEach(id=>{ if (!readyIds.has(id)) transferSelected.delete(id); });
+
+  const managers = getManagers();
+  const q = transferSearch.trim().toLowerCase();
+  const filtered = ready.filter(([,c])=>{
+    if (transferManagerFilter!=="all" && c.manager!==transferManagerFilter) return false;
+    if (q){
+      const contactsHay = (c.contacts||[]).map(ct=>(ct.name||"")+" "+(ct.email||"")+" "+(ct.phone||"")).join(" ");
+      const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")+" "+contactsHay).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   const intro = `<div class="banner good" style="align-items:flex-start;">
     <div>
@@ -1313,19 +1344,30 @@ function renderTransfer(){
     </div>
   </div>`;
 
-  const bulkBarHtml = ready.length===0 ? "" : `
+  const toolbarHtml = `
+    <div class="toolbar" style="margin-top:10px;">
+      <input type="text" id="fTransferSearch" placeholder="Поиск: компания, код, контакт, регион, email…" value="${esc(transferSearch)}"/>
+      <select id="fTransferManager">
+        <option value="all">Все менеджеры</option>
+        ${managers.map(m=>`<option value="${esc(m)}" ${transferManagerFilter===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>
+      <button class="btn subtle" id="btnExportTransfer" ${filtered.length===0?"disabled":""}>⬇ Excel (${filtered.length})</button>
+    </div>`;
+
+  const bulkBarHtml = filtered.length===0 ? "" : `
     <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;">
-      <label class="checkline" style="margin:0;"><input type="checkbox" id="chkSelectAllTransfer" ${ready.length>0 && transferSelected.size===ready.length?"checked":""}/> Выбрать все (${ready.length})</label>
-      <span class="helptext">Выбрано: <b>${transferSelected.size}</b></span>
+      <label class="checkline" style="margin:0;"><input type="checkbox" id="chkSelectAllTransfer" ${filtered.every(([id])=>transferSelected.has(id))?"checked":""}/> Выбрать все на странице (${filtered.length})</label>
+      <span class="helptext">Выбрано всего: <b>${transferSelected.size}</b></span>
       <label class="lbl" style="margin:0;">Дата передачи</label>
       <input type="date" id="bulkTransferDate" value="${esc(bulkTransferDate)}"/>
       <button class="btn" id="btnBulkTransfer" ${transferSelected.size===0?"disabled":""}>Перевести выбранных в дивизион</button>
     </div>`;
 
-  const readyBlock = ready.length===0 ? `<div class="empty">Пока нет клиентов, готовых к передаче.</div>` : (()=>{
-    const rows = ready.map(([id,c])=>{
+  const readyBlock = filtered.length===0 ? `<div class="empty">${ready.length===0?"Пока нет клиентов, готовых к передаче.":"Ничего не найдено по текущим фильтрам."}</div>` : (()=>{
+    const rows = filtered.map(([id,c])=>{
       const h = c.handover||{};
       const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
+      const ship = clientShipmentTotal(c);
       return `<tr data-id="${esc(id)}">
         <td><input type="checkbox" class="chkTransfer" data-id="${esc(id)}" ${transferSelected.has(id)?"checked":""}/></td>
         <td><div class="company">${esc(c.company)}${copyBtnHtml(c.company)}</div><div class="code">${esc(c.code||"")}</div></td>
@@ -1336,6 +1378,7 @@ function renderTransfer(){
         <td class="muted">${esc(c.contactPerson||"—")}</td>
         <td class="muted">${esc(c.phone||"—")}</td>
         <td class="muted">${esc(c.email||"—")}</td>
+        <td class="mono">${ship.sum ? fmtMoney(ship.sum) : "—"}</td>
         <td class="muted">${esc(c.nextStep||"—")}</td>
         <td class="muted">${noContactBadge(c.lastContactDate)}</td>
         <td>${filled?'<span class="pill good">заполнено</span>':'<span class="pill warn">нужно заполнить</span>'}</td>
@@ -1343,13 +1386,13 @@ function renderTransfer(){
     }).join("");
     return `<div class="tablewrap"><div class="tscroll">
       <table>
-        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
+        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th>Сумма отгрузки</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div></div>`;
   })();
 
-  main.innerHTML = intro + bulkBarHtml + readyBlock;
+  main.innerHTML = intro + toolbarHtml + bulkBarHtml + readyBlock;
 
   main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = (e)=>{
     if (e.target.closest(".chkTransfer")) return;
@@ -1366,8 +1409,8 @@ function renderTransfer(){
   const selectAll = document.getElementById("chkSelectAllTransfer");
   if (selectAll) selectAll.onclick = (e)=> e.stopPropagation();
   if (selectAll) selectAll.onchange = ()=>{
-    if (selectAll.checked) ready.forEach(([id])=>transferSelected.add(id));
-    else transferSelected.clear();
+    if (selectAll.checked) filtered.forEach(([id])=>transferSelected.add(id));
+    else filtered.forEach(([id])=>transferSelected.delete(id));
     renderTransfer();
   };
   const bulkDateInput = document.getElementById("bulkTransferDate");
@@ -1375,6 +1418,23 @@ function renderTransfer(){
   wireCopyButtons(main);
   const btnBulk = document.getElementById("btnBulkTransfer");
   if (btnBulk) btnBulk.onclick = ()=> bulkTransferSelected();
+
+  const searchInput = document.getElementById("fTransferSearch");
+  if (searchInput) searchInput.oninput = (e)=>{ transferSearch = e.target.value; renderTransfer(); };
+  const managerSelect = document.getElementById("fTransferManager");
+  if (managerSelect) managerSelect.onchange = (e)=>{ transferManagerFilter = e.target.value; renderTransfer(); };
+  const btnExport = document.getElementById("btnExportTransfer");
+  if (btnExport) btnExport.onclick = ()=> downloadTransferExcel(filtered.map(([,c])=>c));
+
+  if (focusInfo){
+    const el = document.getElementById(focusInfo.id);
+    if (el){
+      el.focus();
+      if (typeof el.setSelectionRange === "function" && focusInfo.start!=null){
+        try{ el.setSelectionRange(focusInfo.start, focusInfo.end); }catch(e){}
+      }
+    }
+  }
 }
 
 async function bulkTransferSelected(){
@@ -2254,6 +2314,64 @@ async function downloadListExcel(rowsClients){
     alert("Не удалось скачать файл: "+(e&&e.message?e.message:"неизвестная ошибка"));
   } finally {
     if (btn){ btn.disabled = false; btn.textContent = "⬇ Excel (текущий список)"; }
+  }
+}
+
+async function downloadTransferExcel(rowsClients){
+  const btn = document.getElementById("btnExportTransfer");
+
+  const header = ["Код","Компания","Менеджер","Отрасль","Дивизион","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Сумма отгрузки, ₽","Кол-во отгрузок","Статус","Следующий шаг / комментарий","Посл. контакт","Важные договорённости","Потенциальные следующие заказы","Открытые вопросы","Подготовка к передаче"];
+  const rows = [ header.map(h=>({val:h, style:1})) ];
+  rowsClients.forEach(c=>{
+    const s = computeScores(c);
+    const h = c.handover||{};
+    const ship = clientShipmentTotal(c);
+    const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
+    rows.push([
+      {val:c.code||""},
+      {val:c.company||""},
+      {val:c.manager||""},
+      {val:c.industry||""},
+      {val:s.division||""},
+      {val:c.region||""},
+      {val:fmtDate(c.registrationDate)},
+      {val:c.contactPerson||""},
+      {val:c.phone||""},
+      {val:c.email||""},
+      {val:extraContactsText(c)},
+      {val: ship.sum, type:"Number"},
+      {val: ship.count, type:"Number"},
+      {val:c.status||""},
+      {val:c.nextStep||""},
+      {val:fmtDate(c.lastContactDate)},
+      {val:h.agreements||""},
+      {val:h.nextOrders||""},
+      {val:h.openQuestions||""},
+      {val: filled ? "заполнено" : "нужно заполнить"},
+    ]);
+  });
+
+  const filterLines = [
+    ["Поиск", transferSearch||"—"],
+    ["Менеджер", transferManagerFilter==="all"?"Все":transferManagerFilter],
+    ["Строк в выгрузке", String(rowsClients.length)],
+    ["Дата выгрузки", fmtDateTime(nowISO())],
+  ];
+  const filterRows = [ ["Параметр","Значение"].map(h=>({val:h, style:1})) ];
+  filterLines.forEach(([k,v])=> filterRows.push([{val:k},{val:v}]));
+
+  const zipBlob = buildXlsxBlob([
+    {name:"Передача в дивизион", rows},
+    {name:"Фильтры", rows: filterRows},
+  ]);
+
+  if (btn){ btn.disabled = true; btn.textContent = "Готовим файл…"; }
+  try {
+    saveBlobAsFile(`CRM_передача_в_дивизион_${todayISO()}.xlsx`, zipBlob);
+  } catch(e){
+    alert("Не удалось скачать файл: "+(e&&e.message?e.message:"неизвестная ошибка"));
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = `⬇ Excel (${rowsClients.length})`; }
   }
 }
 
