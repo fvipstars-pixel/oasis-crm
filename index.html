@@ -1102,10 +1102,11 @@ function tabLabel(c){
   if (c.source==="outgoing") return "Исходящий";
   return "Входящие/исходящие";
 }
-function matchesFilters(c){
+function matchesFilters(c, opts){
+  opts = opts || {};
   if (tabFilter!=="all" && c.tab!==tabFilter) return false;
   if (filters.manager!=="all" && c.manager!==filters.manager) return false;
-  if (filters.status!=="all" && c.status!==filters.status) return false;
+  if (!opts.skipStatus && filters.status!=="all" && c.status!==filters.status) return false;
   if (filters.segment!=="all"){
     const s = computeScores(c);
     if (!s.segment || s.segment.code!==filters.segment) return false;
@@ -1199,8 +1200,12 @@ function renderList(){
     return null;
   })();
   const scoped = Array.from(clients.entries()).filter(([id,c])=> tabFilter==="all" ? true : c.tab===tabFilter);
-  const counts = { total:scoped.length };
-  STATUSES.forEach(s=> counts[s] = scoped.filter(([,c])=>c.status===s).length );
+  // Статистика учитывает поиск, менеджера, сегмент и дату регистрации, но не сам
+  // фильтр статуса — иначе при выборе статуса все остальные карточки обнулились бы.
+  // Так «всего» и разбивка по статусам показывают реальные цифры по выбранному менеджеру/поиску.
+  const statsScope = scoped.filter(([,c])=>matchesFilters(c, {skipStatus:true}));
+  const counts = { total:statsScope.length };
+  STATUSES.forEach(s=> counts[s] = statsScope.filter(([,c])=>c.status===s).length );
 
   const filtered = scoped.filter(([,c])=>matchesFilters(c));
   filtered.sort((a,b)=> compareSortValues(sortValue(a[1],sortCol), sortValue(b[1],sortCol), sortDir));
