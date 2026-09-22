@@ -681,7 +681,7 @@ const clients = new Map(); // id -> data
 let unsub = null;
 let view = "list"; // list | kpi | transfer
 let tabFilter = "dormant"; // dormant | flow | all
-const filters = { search:"", manager:"all", segment:"all", status:"all", regDateFrom:"", regDateTo:"" };
+const filters = { search:"", manager:"all", segment:"all", status:"all", industry:"all", regDateFrom:"", regDateTo:"" };
 const kpiPeriod = { from:"", to:"" }; // период дашборда KPI — фильтр по дате регистрации
 let sortCol = "score"; // company | manager | industry | source | stage | status | segment | score | regDate
 let sortDir = "desc"; // asc | desc
@@ -691,8 +691,10 @@ let shipmentsLoaded = false;
 let shipmentPeriodKey = null; // "YYYY-MM-DD|YYYY-MM-DD" выбранного периода, null = самый свежий
 let shipmentManagerFilter = "all";
 let shipmentDivisionFilter = "all"; // all | Стандарт | Нестандарт
+let shipmentIndustryFilter = "all";
 let shipmentSortCol = "order_sum"; // company | manager | division | order_count | order_sum
 let shipmentSortDir = "desc";
+let transferredIndustryFilter = "all";
 const SORT_COLUMNS = [
   {key:"company", label:"Компания"},
   {key:"manager", label:"Менеджер"},
@@ -744,6 +746,7 @@ const transferSelected = new Set(); // id-ы, отмеченные для мас
 let bulkTransferDate = todayISO();
 let transferSearch = "";
 let transferManagerFilter = "all";
+let transferIndustryFilter = "all";
 
 function uid(){ return "m"+Math.random().toString(36).slice(2,9); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -769,6 +772,11 @@ function getManagers(){
   const set = new Set(DEFAULT_MANAGERS);
   clients.forEach(c=>{ if(c.manager) set.add(c.manager); });
   return Array.from(set).sort();
+}
+function getIndustries(){
+  const set = new Set();
+  clients.forEach(c=>{ if(c.industry) set.add(c.industry); });
+  return Array.from(set).sort((a,b)=>a.localeCompare(b,"ru"));
 }
 function currentManager(){
   return CURRENT_USER ? CURRENT_USER.displayName : "";
@@ -1107,6 +1115,7 @@ function matchesFilters(c, opts){
   if (tabFilter!=="all" && c.tab!==tabFilter) return false;
   if (filters.manager!=="all" && c.manager!==filters.manager) return false;
   if (!opts.skipStatus && filters.status!=="all" && c.status!==filters.status) return false;
+  if (filters.industry!=="all" && (c.industry||"")!==filters.industry) return false;
   if (filters.segment!=="all"){
     const s = computeScores(c);
     if (!s.segment || s.segment.code!==filters.segment) return false;
@@ -1211,6 +1220,7 @@ function renderList(){
   filtered.sort((a,b)=> compareSortValues(sortValue(a[1],sortCol), sortValue(b[1],sortCol), sortDir));
   const dupes = codeCounts();
   const managers = getManagers();
+  const industries = getIndustries();
 
   const toolbarHtml = `
     <div class="toolbar">
@@ -1222,6 +1232,10 @@ function renderList(){
       <select id="fStatus">
         <option value="all">Любой статус</option>
         ${STATUSES.map(s=>`<option value="${esc(s)}" ${filters.status===s?"selected":""}>${esc(s)}</option>`).join("")}
+      </select>
+      <select id="fIndustry">
+        <option value="all">Все отрасли</option>
+        ${industries.map(i=>`<option value="${esc(i)}" ${filters.industry===i?"selected":""}>${esc(i)}</option>`).join("")}
       </select>
       <div class="chipgroup" id="segChips">
         ${["all","A","B","C","D"].map(s=>`<button class="chip ${filters.segment===s?"active":""}" data-seg="${s}">${s==="all"?"Все сегменты":s}</button>`).join("")}
@@ -1288,6 +1302,7 @@ function renderList(){
   document.getElementById("fSearch").oninput = (e)=>{ filters.search=e.target.value; visibleLimit=80; renderList(); };
   document.getElementById("fManager").onchange = (e)=>{ filters.manager=e.target.value; renderList(); };
   document.getElementById("fStatus").onchange = (e)=>{ filters.status=e.target.value; renderList(); };
+  document.getElementById("fIndustry").onchange = (e)=>{ filters.industry=e.target.value; renderList(); };
   document.getElementById("fRegFrom").onchange = (e)=>{ filters.regDateFrom=e.target.value; renderList(); };
   document.getElementById("fRegTo").onchange = (e)=>{ filters.regDateTo=e.target.value; renderList(); };
   const regClearBtn = document.getElementById("btnRegClear");
@@ -1354,9 +1369,12 @@ function renderTransfer(){
   Array.from(transferSelected).forEach(id=>{ if (!readyIds.has(id)) transferSelected.delete(id); });
 
   const managers = getManagers();
+  const industries = Array.from(new Set(ready.map(([,c])=>c.industry).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"ru"));
+  if (transferIndustryFilter!=="all" && !industries.includes(transferIndustryFilter)) transferIndustryFilter = "all";
   const q = transferSearch.trim().toLowerCase();
   const filtered = ready.filter(([,c])=>{
     if (transferManagerFilter!=="all" && c.manager!==transferManagerFilter) return false;
+    if (transferIndustryFilter!=="all" && c.industry!==transferIndustryFilter) return false;
     if (q){
       const contactsHay = (c.contacts||[]).map(ct=>(ct.name||"")+" "+(ct.email||"")+" "+(ct.phone||"")).join(" ");
       const hay = ((c.company||"")+" "+(c.code||"")+" "+(c.contactPerson||"")+" "+(c.region||"")+" "+(c.email||"")+" "+(c.manager||"")+" "+contactsHay).toLowerCase();
@@ -1381,6 +1399,10 @@ function renderTransfer(){
       <select id="fTransferManager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m=>`<option value="${esc(m)}" ${transferManagerFilter===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>
+      <select id="fTransferIndustry">
+        <option value="all">Все отрасли</option>
+        ${industries.map(i=>`<option value="${esc(i)}" ${transferIndustryFilter===i?"selected":""}>${esc(i)}</option>`).join("")}
       </select>
       <button class="btn subtle" id="btnExportTransfer" ${filtered.length===0?"disabled":""}>⬇ Excel (${filtered.length})</button>
     </div>`;
@@ -1461,6 +1483,8 @@ function renderTransfer(){
   if (searchInput) searchInput.oninput = (e)=>{ transferSearch = e.target.value; renderTransfer(); };
   const managerSelect = document.getElementById("fTransferManager");
   if (managerSelect) managerSelect.onchange = (e)=>{ transferManagerFilter = e.target.value; renderTransfer(); };
+  const industrySelect = document.getElementById("fTransferIndustry");
+  if (industrySelect) industrySelect.onchange = (e)=>{ transferIndustryFilter = e.target.value; renderTransfer(); };
   const btnExport = document.getElementById("btnExportTransfer");
   if (btnExport) btnExport.onclick = ()=> downloadTransferExcel(filtered.map(([,c])=>c));
 
@@ -1522,9 +1546,14 @@ function renderTransferred(){
     if (!b.ci.transferDate) return 1;
     return a.ci.until.localeCompare(b.ci.until);
   });
-  const nActive = withInfo.filter(x=>x.ci.active).length;
-  const nExpired = withInfo.filter(x=>x.ci.transferDate && !x.ci.active).length;
-  const nNoDate = withInfo.filter(x=>!x.ci.transferDate).length;
+
+  const industries = Array.from(new Set(withInfo.map(x=>x.c.industry).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"ru"));
+  if (transferredIndustryFilter!=="all" && !industries.includes(transferredIndustryFilter)) transferredIndustryFilter = "all";
+  const filteredInfo = transferredIndustryFilter==="all" ? withInfo : withInfo.filter(x=>x.c.industry===transferredIndustryFilter);
+
+  const nActive = filteredInfo.filter(x=>x.ci.active).length;
+  const nExpired = filteredInfo.filter(x=>x.ci.transferDate && !x.ci.active).length;
+  const nNoDate = filteredInfo.filter(x=>!x.ci.transferDate).length;
 
   const intro = `<div class="banner ${nNoDate>0?"warn":"good"}" style="align-items:flex-start;">
     <div>
@@ -1533,8 +1562,16 @@ function renderTransferred(){
     </div>
   </div>`;
 
-  const block = withInfo.length===0 ? `<div class="empty">Пока нет переданных клиентов.</div>` : (()=>{
-    const rows = withInfo.map(({id,c,ci})=>{
+  const toolbarHtml = industries.length===0 ? "" : `
+    <div class="toolbar" style="margin-top:10px;">
+      <select id="fTransferredIndustry">
+        <option value="all">Все отрасли</option>
+        ${industries.map(i=>`<option value="${esc(i)}" ${transferredIndustryFilter===i?"selected":""}>${esc(i)}</option>`).join("")}
+      </select>
+    </div>`;
+
+  const block = filteredInfo.length===0 ? `<div class="empty">${withInfo.length===0?"Пока нет переданных клиентов.":"Ничего не найдено по текущему фильтру."}</div>` : (()=>{
+    const rows = filteredInfo.map(({id,c,ci})=>{
       let statusCell;
       if (!ci.transferDate) statusCell = `<span class="pill warn">дата не указана</span>`;
       else statusCell = ci.active ? `<span class="pill good">активна до ${fmtDate(ci.until)}</span>` : `<span class="pill neutral">истекла ${fmtDate(ci.until)}</span>`;
@@ -1556,9 +1593,11 @@ function renderTransferred(){
     </div></div>`;
   })();
 
-  main.innerHTML = intro + block;
+  main.innerHTML = intro + toolbarHtml + block;
   main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = ()=>openDrawer(tr.getAttribute("data-id")));
   wireCopyButtons(main);
+  const indSel = document.getElementById("fTransferredIndustry");
+  if (indSel) indSel.onchange = (e)=>{ transferredIndustryFilter=e.target.value; renderTransferred(); };
 }
 
 /* =====================================================================
@@ -1618,7 +1657,11 @@ function renderShipments(){
     .map(s=> Object.assign({}, s, shipmentLiveInfo(s)));
   const managersHere = Array.from(new Set(scoped.map(s=>s.manager).filter(Boolean))).sort();
   const scopedByManager = scoped.filter(s=> shipmentManagerFilter==="all" ? true : s.manager===shipmentManagerFilter);
-  const filtered = scopedByManager.filter(s=> shipmentDivisionFilter==="all" ? true : s.division===shipmentDivisionFilter);
+  const industriesHere = Array.from(new Set(scopedByManager.map(s=>s.industry).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"ru"));
+  if (shipmentIndustryFilter!=="all" && !industriesHere.includes(shipmentIndustryFilter)) shipmentIndustryFilter = "all";
+  const filtered = scopedByManager
+    .filter(s=> shipmentDivisionFilter==="all" ? true : s.division===shipmentDivisionFilter)
+    .filter(s=> shipmentIndustryFilter==="all" ? true : s.industry===shipmentIndustryFilter);
   filtered.sort((a,b)=> compareSortValues(shipmentSortValue(a,shipmentSortCol), shipmentSortValue(b,shipmentSortCol), shipmentSortDir));
 
   const totalCount = filtered.reduce((sum,s)=> sum+(s.order_count||0), 0);
@@ -1640,6 +1683,10 @@ function renderShipments(){
       <div class="chipgroup" id="shipDivChips">
         ${["all","Стандарт","Нестандарт"].map(d=>`<button class="chip ${shipmentDivisionFilter===d?"active":""}" data-div="${esc(d)}">${d==="all"?"Все дивизионы":esc(d)}</button>`).join("")}
       </div>
+      ${industriesHere.length>0 ? `<select id="fShipIndustry">
+        <option value="all">Все отрасли</option>
+        ${industriesHere.map(i=>`<option value="${esc(i)}" ${shipmentIndustryFilter===i?"selected":""}>${esc(i)}</option>`).join("")}
+      </select>` : ""}
     </div>`;
 
   const statsHtml = `
@@ -1688,12 +1735,14 @@ function renderShipments(){
 
   main.innerHTML = toolbarHtml + statsHtml + tableHtml;
 
-  document.getElementById("fShipPeriod").onchange = (e)=>{ shipmentPeriodKey=e.target.value; shipmentManagerFilter="all"; shipmentDivisionFilter="all"; renderShipments(); };
+  document.getElementById("fShipPeriod").onchange = (e)=>{ shipmentPeriodKey=e.target.value; shipmentManagerFilter="all"; shipmentDivisionFilter="all"; shipmentIndustryFilter="all"; renderShipments(); };
   const mgrSel = document.getElementById("fShipManager");
-  if (mgrSel) mgrSel.onchange = (e)=>{ shipmentManagerFilter=e.target.value; renderShipments(); };
+  if (mgrSel) mgrSel.onchange = (e)=>{ shipmentManagerFilter=e.target.value; shipmentIndustryFilter="all"; renderShipments(); };
   document.querySelectorAll("#shipDivChips [data-div]").forEach(b=>{
     b.onclick = ()=>{ shipmentDivisionFilter=b.getAttribute("data-div"); renderShipments(); };
   });
+  const indSel = document.getElementById("fShipIndustry");
+  if (indSel) indSel.onchange = (e)=>{ shipmentIndustryFilter=e.target.value; renderShipments(); };
   main.querySelectorAll("thead [data-sort]").forEach(th=>{
     th.onclick = ()=>{
       const col = th.getAttribute("data-sort");
@@ -2478,6 +2527,7 @@ async function downloadListExcel(rowsClients){
     ["Поиск", filters.search||"—"],
     ["Менеджер", filters.manager==="all"?"Все":filters.manager],
     ["Статус", filters.status==="all"?"Любой":filters.status],
+    ["Отрасль", filters.industry==="all"?"Все":filters.industry],
     ["Сегмент", filters.segment==="all"?"Все":filters.segment],
     ["Дата регистрации от", filters.regDateFrom||"—"],
     ["Дата регистрации до", filters.regDateTo||"—"],
