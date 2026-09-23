@@ -747,6 +747,8 @@ let bulkTransferDate = todayISO();
 let transferSearch = "";
 let transferManagerFilter = "all";
 let transferIndustryFilter = "all";
+let transferSortCol = null; // null = по умолчанию (посл. контакт); "shipSum" — по сумме отгрузки
+let transferSortDir = "desc";
 
 function uid(){ return "m"+Math.random().toString(36).slice(2,9); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1383,6 +1385,10 @@ function renderTransfer(){
     return true;
   });
 
+  if (transferSortCol==="shipSum"){
+    filtered.sort((a,b)=> compareSortValues(clientShipmentTotal(a[1]).sum, clientShipmentTotal(b[1]).sum, transferSortDir));
+  }
+
   const intro = `<div class="banner good" style="align-items:flex-start;">
     <div>
       <b>Готовы к передаче в Дивизион 2:</b> отрасль = «Стандарт» и статус = «Активен (сделал заказ)».
@@ -1446,7 +1452,7 @@ function renderTransfer(){
     }).join("");
     return `<div class="tablewrap"><div class="tscroll">
       <table>
-        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th>Сумма отгрузки</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
+        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th class="sortable${transferSortCol==="shipSum"?" sorted":""}" data-sort="shipSum">Сумма отгрузки${transferSortCol==="shipSum"?(transferSortDir==="asc"?" ▲":" ▼"):""}</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div></div>`;
@@ -1487,6 +1493,14 @@ function renderTransfer(){
   if (industrySelect) industrySelect.onchange = (e)=>{ transferIndustryFilter = e.target.value; renderTransfer(); };
   const btnExport = document.getElementById("btnExportTransfer");
   if (btnExport) btnExport.onclick = ()=> downloadTransferExcel(filtered.map(([,c])=>c));
+  main.querySelectorAll("thead [data-sort]").forEach(th=>{
+    th.onclick = ()=>{
+      const col = th.getAttribute("data-sort");
+      if (transferSortCol===col) transferSortDir = transferSortDir==="asc" ? "desc" : "asc";
+      else { transferSortCol = col; transferSortDir = "desc"; }
+      renderTransfer();
+    };
+  });
 
   if (focusInfo){
     const el = document.getElementById(focusInfo.id);
