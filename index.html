@@ -604,6 +604,9 @@ const REJECTION_REASONS = [
 ];
 
 const DEFAULT_MANAGERS = ["Симонян Лусинэ","Фёдоров Роман"];
+// Менеджер ведения — отдельная роль (работает с уже действующими клиентами
+// Романа и Лусинэ), не путать с «Менеджер» (тот, кто привёл/развивает клиента).
+const DEFAULT_ACCOUNT_MANAGERS = ["Веряскина Анна"];
 
 /* =====================================================================
    SCORING ENGINE — mirrors Методология_воронка_и_скоринг.docx
@@ -681,7 +684,7 @@ const clients = new Map(); // id -> data
 let unsub = null;
 let view = "list"; // list | kpi | transfer
 let tabFilter = "dormant"; // dormant | flow | all
-const filters = { search:"", manager:"all", segment:"all", status:"all", industry:"all", regDateFrom:"", regDateTo:"" };
+const filters = { search:"", manager:"all", accountManager:"all", segment:"all", status:"all", industry:"all", regDateFrom:"", regDateTo:"" };
 const kpiPeriod = { from:"", to:"" }; // период дашборда KPI — фильтр по дате регистрации
 let sortCol = "score"; // company | manager | industry | source | stage | status | segment | score | regDate
 let sortDir = "desc"; // asc | desc
@@ -698,6 +701,7 @@ let transferredIndustryFilter = "all";
 const SORT_COLUMNS = [
   {key:"company", label:"Компания"},
   {key:"manager", label:"Менеджер"},
+  {key:"accountManager", label:"Менеджер ведения"},
   {key:"industry", label:"Отрасль"},
   {key:"region", label:"Регион"},
   {key:"source", label:"Источник"},
@@ -715,6 +719,7 @@ function sortValue(c, col){
   switch(col){
     case "company": return c.company || null;
     case "manager": return c.manager || null;
+    case "accountManager": return c.accountManager || null;
     case "industry": return c.industry || null;
     case "region": return c.region || null;
     case "source": return tabLabel(c) || null;
@@ -773,6 +778,11 @@ function noContactBadge(lastContactDateIso){
 function getManagers(){
   const set = new Set(DEFAULT_MANAGERS);
   clients.forEach(c=>{ if(c.manager) set.add(c.manager); });
+  return Array.from(set).sort();
+}
+function getAccountManagers(){
+  const set = new Set(DEFAULT_ACCOUNT_MANAGERS);
+  clients.forEach(c=>{ if(c.accountManager) set.add(c.accountManager); });
   return Array.from(set).sort();
 }
 function getIndustries(){
@@ -1003,6 +1013,7 @@ function normalizeClient(data){
     }
   }
   if (!Array.isArray(data.changeLog)) data.changeLog = [];
+  if (data.accountManager==null) data.accountManager = "";
   // старые карточки хранят единственное поле "следующий шаг" — переносим его
   // в ленту заметок одной первой записью, чтобы не потерять то, что уже написано
   if (!Array.isArray(data.notes)) data.notes = [];
@@ -1116,6 +1127,7 @@ function matchesFilters(c, opts){
   opts = opts || {};
   if (tabFilter!=="all" && c.tab!==tabFilter) return false;
   if (filters.manager!=="all" && c.manager!==filters.manager) return false;
+  if (filters.accountManager!=="all" && (c.accountManager||"")!==filters.accountManager) return false;
   if (!opts.skipStatus && filters.status!=="all" && c.status!==filters.status) return false;
   if (filters.industry!=="all" && (c.industry||"")!==filters.industry) return false;
   if (filters.segment!=="all"){
@@ -1222,6 +1234,7 @@ function renderList(){
   filtered.sort((a,b)=> compareSortValues(sortValue(a[1],sortCol), sortValue(b[1],sortCol), sortDir));
   const dupes = codeCounts();
   const managers = getManagers();
+  const accountManagers = getAccountManagers();
   const industries = getIndustries();
 
   const toolbarHtml = `
@@ -1230,6 +1243,10 @@ function renderList(){
       <select id="fManager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m=>`<option value="${esc(m)}" ${filters.manager===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>
+      <select id="fAccountManager">
+        <option value="all">Все менеджеры ведения</option>
+        ${accountManagers.map(m=>`<option value="${esc(m)}" ${filters.accountManager===m?"selected":""}>${esc(m)}</option>`).join("")}
       </select>
       <select id="fStatus">
         <option value="all">Любой статус</option>
@@ -1269,6 +1286,7 @@ function renderList(){
         <div class="code">${esc(c.code||"без кода")}${dup?' <span class="warnflag">⚠ дублируется</span>':''}</div>
       </td>
       <td class="muted">${esc(c.manager||"—")}</td>
+      <td class="muted">${esc(c.accountManager||"—")}</td>
       <td class="muted">${esc(c.industry||"—")}</td>
       <td class="muted">${esc(c.region||"—")}</td>
       <td class="muted">${esc(tabLabel(c))}</td>
@@ -1303,6 +1321,7 @@ function renderList(){
 
   document.getElementById("fSearch").oninput = (e)=>{ filters.search=e.target.value; visibleLimit=80; renderList(); };
   document.getElementById("fManager").onchange = (e)=>{ filters.manager=e.target.value; renderList(); };
+  document.getElementById("fAccountManager").onchange = (e)=>{ filters.accountManager=e.target.value; renderList(); };
   document.getElementById("fStatus").onchange = (e)=>{ filters.status=e.target.value; renderList(); };
   document.getElementById("fIndustry").onchange = (e)=>{ filters.industry=e.target.value; renderList(); };
   document.getElementById("fRegFrom").onchange = (e)=>{ filters.regDateFrom=e.target.value; renderList(); };
@@ -1816,6 +1835,25 @@ function computeKpiData(){
   return {managers, buckets, bucketLabels, statsFor, perManager, grand, grandTotal, source};
 }
 
+// Отдельная сводка по «Менеджеру ведения» (аккаунт-менеджеру) — независимая от
+// таблицы выше, которая считает по «Менеджеру» (кто привёл клиента). Один и тот же
+// клиент учитывается и там, и там — это разные роли, а не альтернативные варианты одной.
+function computeAccountManagerBreakdown(source){
+  function statsFor(list){
+    const total = list.length;
+    const done = list.filter(isConverted).length;
+    return {total, done, conv: total? (done/total*100):0};
+  }
+  const accountManagers = getAccountManagers();
+  const rows = accountManagers.map(m=>{
+    const own = source.filter(c=>c.accountManager===m);
+    return {manager:m, stats: statsFor(own)};
+  }).filter(r=>r.stats.total>0);
+  rows.sort((a,b)=> b.stats.total - a.stats.total);
+  const grandTotal = statsFor(source.filter(c=>c.accountManager));
+  return {rows, grandTotal};
+}
+
 /* =====================================================================
    ГРАФИКИ ДАШБОРДА KPI — рукописный inline SVG (без внешних библиотек)
    ===================================================================== */
@@ -2089,6 +2127,7 @@ function renderKpi(){
   const managerConvData = computeManagerConversionChart(perManager);
   const segmentData = computeSegmentBreakdown(source);
   const industryData = computeIndustryBreakdown(source);
+  const accountManagerData = computeAccountManagerBreakdown(source);
 
   const monthlyChartHtml = buildKpiChartCard({
     id:"monthly", title:"Новые клиенты по месяцам (дата регистрации)",
@@ -2179,6 +2218,23 @@ function renderKpi(){
       </table>
       </div>
       <div class="helptext" style="margin-top:10px;">«Заказ» считается по статусу «Активен (сделал заказ)» или «Передан в дивизион». Обновляйте статус по факту первой отгрузки, чтобы конверсия считалась верно. Период фильтрует по дате регистрации партнёра; клиенты без даты регистрации при выбранном периоде не учитываются.</div>
+    </div>
+    <div class="kpi-card" style="margin-top:16px;">
+      <h2>Менеджеры ведения — отдельная статистика</h2>
+      <div class="helptext" style="margin-top:4px;">«Менеджер ведения» — это отдельное поле в карточке клиента (кто ведёт клиента после передачи), отличное от «Менеджера» (кто привёл клиента). Таблица ниже не связана с таблицей выше.</div>
+      <div class="tscroll" style="margin-top:10px;">
+        <table class="kpi">
+          <thead><tr><th>Менеджер ведения</th><th>Клиентов</th><th>Заказ</th><th>Конв.</th></tr></thead>
+          <tbody>
+            ${accountManagerData.rows.map(r=>`<tr><td>${esc(r.manager)}</td><td>${r.stats.total}</td><td>${r.stats.done}</td><td>${r.stats.conv.toFixed(0)}%</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Нет клиентов с заполненным полем «Менеджер ведения»</td></tr>`}
+          </tbody>
+          <tfoot>
+            <tr><td>Итого по всем</td><td>${accountManagerData.grandTotal.total}</td><td>${accountManagerData.grandTotal.done}</td><td>${accountManagerData.grandTotal.conv.toFixed(0)}%</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="kpi-card" style="margin-top:16px;">
       <div class="kpi-charts-grid">
         ${monthlyChartHtml}
         ${transferChartHtml}
@@ -2405,7 +2461,7 @@ async function downloadKpiExcel(){
   sheet1Rows.push(footRow);
 
   // Лист 2 — список клиентов за выбранный на дашборде период (по дате регистрации)
-  const clientHeader = ["Код","Компания","Менеджер","Раздел","Источник","Отрасль","Дивизион","Этап","Статус","Регион","Скоринг","Сегмент","Дата регистрации","Дата последнего контакта","Дата передачи","Комиссия менеджеру до","Комиссия активна"];
+  const clientHeader = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Источник","Отрасль","Дивизион","Этап","Статус","Регион","Скоринг","Сегмент","Дата регистрации","Дата последнего контакта","Дата передачи","Комиссия менеджеру до","Комиссия активна"];
   const sheet2Rows = [ clientHeader.map(h=>({val:h, style:1})) ];
   kd.source
     .slice()
@@ -2417,6 +2473,7 @@ async function downloadKpiExcel(){
         {val:c.code||""},
         {val:c.company||""},
         {val:c.manager||""},
+        {val:c.accountManager||""},
         {val:c.tab==="dormant"?"Спящие клиенты":"Входящие и исходящие"},
         {val:kd.bucketLabels[bucketOf(c)]||""},
         {val:c.industry||""},
@@ -2483,11 +2540,30 @@ async function downloadKpiExcel(){
     ]);
   });
 
+  // Лист 5 — «Менеджеры ведения» (отдельная сводка, как на дашборде)
+  const amd = computeAccountManagerBreakdown(kd.source);
+  const sheet5Rows = [ ["Менеджер ведения","Клиентов","Заказ","Конв. %"].map(h=>({val:h, style:1})) ];
+  amd.rows.forEach(r=>{
+    sheet5Rows.push([
+      {val:r.manager},
+      {val:r.stats.total, type:"Number"},
+      {val:r.stats.done, type:"Number"},
+      {val:Number(r.stats.conv.toFixed(0)), type:"Number"},
+    ]);
+  });
+  sheet5Rows.push([
+    {val:"Итого по всем", style:1},
+    {val:amd.grandTotal.total, type:"Number", style:1},
+    {val:amd.grandTotal.done, type:"Number", style:1},
+    {val:Number(amd.grandTotal.conv.toFixed(0)), type:"Number", style:1},
+  ]);
+
   const zipBlob = buildXlsxBlob([
     {name:"KPI по менеджерам", rows: sheet1Rows},
     {name:"Клиенты", rows: sheet2Rows},
     {name:"Передача в дивизион", rows: sheet3Rows},
     {name:"Переданные (комиссия)", rows: sheet4Rows},
+    {name:"Менеджеры ведения", rows: sheet5Rows},
   ]);
 
   let periodSuffix = "";
@@ -2507,7 +2583,7 @@ async function downloadKpiExcel(){
 async function downloadListExcel(rowsClients){
   const btn = document.getElementById("btnExportList");
 
-  const header = ["Код","Компания","Менеджер","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Доп. контакты","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
+  const header = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Доп. контакты","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -2516,6 +2592,7 @@ async function downloadListExcel(rowsClients){
       {val:c.code||""},
       {val:c.company||""},
       {val:c.manager||""},
+      {val:c.accountManager||""},
       {val:c.tab==="dormant"?"Спящие клиенты":"Входящие и исходящие"},
       {val:c.industry||""},
       {val:c.stage||""},
@@ -2540,6 +2617,7 @@ async function downloadListExcel(rowsClients){
     ["Вкладка", tabFilter==="all"?"Все клиенты":(tabFilter==="dormant"?"Спящие клиенты":"Входящие и исходящие")],
     ["Поиск", filters.search||"—"],
     ["Менеджер", filters.manager==="all"?"Все":filters.manager],
+    ["Менеджер ведения", filters.accountManager==="all"?"Все":filters.accountManager],
     ["Статус", filters.status==="all"?"Любой":filters.status],
     ["Отрасль", filters.industry==="all"?"Все":filters.industry],
     ["Сегмент", filters.segment==="all"?"Все":filters.segment],
@@ -2570,7 +2648,7 @@ async function downloadListExcel(rowsClients){
 async function downloadTransferExcel(rowsClients){
   const btn = document.getElementById("btnExportTransfer");
 
-  const header = ["Код","Компания","Менеджер","Отрасль","Дивизион","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Сумма отгрузки, ₽","Кол-во отгрузок","Статус","Следующий шаг / комментарий","Посл. контакт","Важные договорённости","Потенциальные следующие заказы","Открытые вопросы","Подготовка к передаче"];
+  const header = ["Код","Компания","Менеджер","Менеджер ведения","Отрасль","Дивизион","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Сумма отгрузки, ₽","Кол-во отгрузок","Статус","Следующий шаг / комментарий","Посл. контакт","Важные договорённости","Потенциальные следующие заказы","Открытые вопросы","Подготовка к передаче"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -2581,6 +2659,7 @@ async function downloadTransferExcel(rowsClients){
       {val:c.code||""},
       {val:c.company||""},
       {val:c.manager||""},
+      {val:c.accountManager||""},
       {val:c.industry||""},
       {val:s.division||""},
       {val:c.region||""},
@@ -2631,7 +2710,7 @@ async function downloadTransferExcel(rowsClients){
 function blankClient(tab){
   const wm = currentManager();
   return {
-    code:"", company:"", manager: wm, tab, source: tab==="flow" ? "incoming" : null,
+    code:"", company:"", manager: wm, accountManager:"", tab, source: tab==="flow" ? "incoming" : null,
     registrationDate: todayISO(), industry:null, companySize:null, potentialVolume:null,
     flowHistory: tab==="flow" ? "Входящая заявка — < 2 месяцев с обращения" : null,
     engagement:{responded:false,hadCall:false,requestedKp:false},
@@ -2706,6 +2785,7 @@ function renderDrawerBody(){
   const s = computeScores(draft);
   const body = document.getElementById("drawerBody");
   const managers = getManagers();
+  const accountManagers = getAccountManagers();
 
   body.innerHTML = `
     <div>
@@ -2715,6 +2795,9 @@ function renderDrawerBody(){
         <div><label class="lbl">Код клиента (1С)</label><input type="text" id="f_code" value="${esc(draft.code)}" placeholder="1-00000000"/></div>
         <div><label class="lbl">Менеджер</label>
           <select id="f_manager">${fieldOpts(managers, draft.manager, "— выбрать —")}</select>
+        </div>
+        <div><label class="lbl">Менеджер ведения</label>
+          <select id="f_accountManager">${fieldOpts(accountManagers, draft.accountManager, "— выбрать —")}</select>
         </div>
         <div><label class="lbl">Дата регистрации</label><input type="date" id="f_regdate" value="${esc(draft.registrationDate||"")}"/></div>
         ${draft.tab==="flow" ? `<div><label class="lbl">Источник</label>
@@ -2905,6 +2988,7 @@ function wireDrawerInputs(){
   bind("f_company","company");
   bind("f_code","code");
   bind("f_manager","manager");
+  bind("f_accountManager","accountManager");
   bind("f_regdate","registrationDate");
   bind("f_source","source");
   bind("f_region","region");
@@ -3068,6 +3152,9 @@ async function performSaveDrawer(retryCount){
       }
       if ((prev.manager||"") !== (draft.manager||"")){
         changes.push({field:"Менеджер", from: prev.manager||"—", to: draft.manager||"—"});
+      }
+      if ((prev.accountManager||"") !== (draft.accountManager||"")){
+        changes.push({field:"Менеджер ведения", from: prev.accountManager||"—", to: draft.accountManager||"—"});
       }
       const prevContactsStr = contactsSummary(prev.contacts);
       const draftContactsStr = contactsSummary(draft.contacts);
