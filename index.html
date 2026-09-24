@@ -92,7 +92,7 @@
   .navbtn .count{color:var(--text-faint); font-weight:500; margin-left:4px;}
   .navbtn.active .count{color:var(--accent-strong);}
 
-  main{flex:1; padding:20px clamp(16px,3vw,32px) 48px; display:flex; flex-direction:column; gap:16px; max-width:1400px; width:100%; margin:0 auto;}
+  main{flex:1; padding:20px clamp(16px,3vw,32px) 48px; display:flex; flex-direction:column; gap:16px; max-width:1600px; width:100%; margin:0 auto;}
 
   /* ---------- summary strip ---------- */
   .stats{display:flex; gap:10px; flex-wrap:wrap;}
@@ -134,16 +134,24 @@
   table{width:100%; border-collapse:collapse; min-width:920px;}
   thead th{
     text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint);
-    padding:10px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; font-weight:600;
+    padding:8px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; font-weight:600;
   }
   thead th.sortable{cursor:pointer; user-select:none;}
   thead th.sortable:hover{color:var(--accent-strong);}
   thead th.sortable.sorted{color:var(--accent-strong);}
-  /* «Менеджер ведения» — колонка узкая, как «Менеджер»: заголовок и имя переносятся
-     на две строки, а не растягивают таблицу под самый длинный заголовок. */
-  th.col-accountmgr{white-space:normal; max-width:100px;}
-  td.col-accountmgr{max-width:100px;}
-  tbody td{padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13.5px;}
+  /* Столбцы, где раньше именно длинный ЗАГОЛОВОК (не сами данные) раздувал ширину
+     таблицы — заголовку разрешаем перенос на две строки вместо растягивания колонки. */
+  th.col-accountmgr, th.col-revenue, th.col-regdate, th.col-lastcontact{white-space:normal;}
+  th.col-accountmgr, td.col-accountmgr{max-width:100px;}
+  th.col-revenue, td.col-revenue{max-width:92px;}
+  th.col-regdate, td.col-regdate{max-width:86px;}
+  th.col-lastcontact, td.col-lastcontact{max-width:96px;}
+  td.col-lastcontact .pill{white-space:normal; text-align:center;}
+  /* Статус — самая широкая колонка была из-за плашки статуса в одну строку;
+     разрешаем ей перенос на две строки только внутри списка клиентов. */
+  td.col-status{max-width:104px;}
+  td.col-status .pill{white-space:normal; text-align:center;}
+  tbody td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13.5px;}
   tbody tr{cursor:pointer;}
   tbody tr:hover td{background:var(--accent-weak);}
   tbody tr:last-child td{border-bottom:none;}
@@ -717,6 +725,14 @@ const SORT_COLUMNS = [
   {key:"regDate", label:"Дата регистрации"},
   {key:"lastContact", label:"Посл. контакт"},
 ];
+// Столбцы, у которых длинный ЗАГОЛОВОК (не сами данные) раздувал ширину таблицы —
+// заголовку разрешаем перенос на две строки и ограничиваем ширину и заголовка, и ячеек.
+const NARROW_LIST_COLS = {
+  accountManager: "col-accountmgr",
+  revenue: "col-revenue",
+  regDate: "col-regdate",
+  lastContact: "col-lastcontact",
+};
 const SORT_DEFAULT_DIR = {score:"desc", revenue:"desc", regDate:"desc", lastContact:"asc"};
 function sortValue(c, col){
   const s = computeScores(c);
@@ -1295,12 +1311,12 @@ function renderList(){
       <td class="muted">${esc(c.region||"—")}</td>
       <td class="muted">${esc(tabLabel(c))}</td>
       <td class="muted">${esc(c.stage||"—")}</td>
-      <td><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
+      <td class="col-status"><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
       <td>${s.segment?`<span class="pill ${s.segment.style}">${s.segment.code}</span>`:'<span class="muted">—</span>'}</td>
       <td class="mono">${s.total}</td>
-      <td class="mono">${fmtMoney(c.revenue2025)}</td>
-      <td class="muted">${fmtDate(c.registrationDate)}</td>
-      <td class="muted">${noContactBadge(c.lastContactDate)}</td>
+      <td class="mono col-revenue">${fmtMoney(c.revenue2025)}</td>
+      <td class="muted col-regdate">${fmtDate(c.registrationDate)}</td>
+      <td class="muted col-lastcontact">${noContactBadge(c.lastContactDate)}</td>
     </tr>`;
   }).join("");
 
@@ -1312,7 +1328,8 @@ function renderList(){
           ${SORT_COLUMNS.map(col=>{
             const active = sortCol===col.key;
             const arrow = active ? (sortDir==="asc" ? " ▲" : " ▼") : "";
-            const narrow = col.key==="accountManager" ? " col-accountmgr" : "";
+            const narrowClass = NARROW_LIST_COLS[col.key] || "";
+            const narrow = narrowClass ? " "+narrowClass : "";
             return `<th class="sortable${active?" sorted":""}${narrow}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
           }).join("")}
         </tr></thead>
