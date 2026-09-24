@@ -139,6 +139,10 @@
   thead th.sortable{cursor:pointer; user-select:none;}
   thead th.sortable:hover{color:var(--accent-strong);}
   thead th.sortable.sorted{color:var(--accent-strong);}
+  /* «Менеджер ведения» — колонка узкая, как «Менеджер»: заголовок и имя переносятся
+     на две строки, а не растягивают таблицу под самый длинный заголовок. */
+  th.col-accountmgr{white-space:normal; max-width:100px;}
+  td.col-accountmgr{max-width:100px;}
   tbody td{padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13.5px;}
   tbody tr{cursor:pointer;}
   tbody tr:hover td{background:var(--accent-weak);}
@@ -1286,7 +1290,7 @@ function renderList(){
         <div class="code">${esc(c.code||"без кода")}${dup?' <span class="warnflag">⚠ дублируется</span>':''}</div>
       </td>
       <td class="muted">${esc(c.manager||"—")}</td>
-      <td class="muted">${esc(c.accountManager||"—")}</td>
+      <td class="muted col-accountmgr">${esc(c.accountManager||"—")}</td>
       <td class="muted">${esc(c.industry||"—")}</td>
       <td class="muted">${esc(c.region||"—")}</td>
       <td class="muted">${esc(tabLabel(c))}</td>
@@ -1308,7 +1312,8 @@ function renderList(){
           ${SORT_COLUMNS.map(col=>{
             const active = sortCol===col.key;
             const arrow = active ? (sortDir==="asc" ? " ▲" : " ▼") : "";
-            return `<th class="sortable${active?" sorted":""}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
+            const narrow = col.key==="accountManager" ? " col-accountmgr" : "";
+            return `<th class="sortable${active?" sorted":""}${narrow}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
           }).join("")}
         </tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -3038,15 +3043,7 @@ function wireDrawerInputs(){
   });
 
   const btnAddNote = document.getElementById("btnAddNote");
-  if (btnAddNote) btnAddNote.addEventListener("click", ()=>{
-    const noteInput = document.getElementById("f_newnote");
-    const text = (noteInput && noteInput.value || "").trim();
-    if (!text) return;
-    if (!Array.isArray(draft.notes)) draft.notes = [];
-    draft.notes.push({ text, at: nowISO(), by: currentManager() || "" });
-    draft.nextStep = text; // "зеркало" последней заметки — для списков и выгрузок, которые ещё смотрят на nextStep
-    renderDrawerBody();
-  });
+  if (btnAddNote) btnAddNote.addEventListener("click", ()=> addNoteAndSave());
   const statusSel = document.getElementById("f_status");
   if (statusSel) statusSel.addEventListener("change", ()=>{
     draft.status = statusSel.value;
@@ -3076,6 +3073,47 @@ function onDraftChanged(){
     <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":"Пока не готов к передаче"}</span>`;
   const commBanner = document.getElementById("commissionBanner");
   if (commBanner) commBanner.innerHTML = commissionBannerHtml(draft);
+}
+
+// Заметка сохраняется в базу сразу по кнопке «Добавить заметку», а не только по
+// общей кнопке «Сохранить» — раньше её было легко забыть нажать, и заметка терялась.
+// У нового (ещё не созданного) клиента писать в базу нечего — заметка уйдёт вместе
+// с карточкой при первом сохранении, как и раньше.
+async function addNoteAndSave(){
+  if (!drawerState) return;
+  const { id, isNew, draft } = drawerState;
+  const noteInput = document.getElementById("f_newnote");
+  const text = (noteInput && noteInput.value || "").trim();
+  if (!text) return;
+  if (!Array.isArray(draft.notes)) draft.notes = [];
+  draft.notes.push({ text, at: nowISO(), by: currentManager() || "" });
+  draft.nextStep = text; // "зеркало" последней заметки — для списков и выгрузок, которые ещё смотрят на nextStep
+  if (!isNew){
+    draft.updatedAt = nowISO();
+    draft.updatedBy = currentManager() || draft.updatedBy || "";
+  }
+  renderDrawerBody();
+  if (isNew || !db) return;
+  const btn = document.getElementById("btnAddNote");
+  if (btn){ btn.disabled = true; btn.textContent = "Сохраняем…"; }
+  try{
+    // Частичное обновление — уходят только заметки/следующий шаг, а не весь черновик
+    // карточки, чтобы случайно не сохранить в базу другие поля, которые менеджер ещё
+    // не закончил редактировать и не подтвердил кнопкой «Сохранить».
+    await db.doc("clients/"+id).update({
+      notes: draft.notes,
+      nextStep: draft.nextStep,
+      updatedAt: draft.updatedAt,
+      updatedBy: draft.updatedBy,
+    });
+    toast("Заметка сохранена");
+  }catch(e){
+    console.error(e);
+    toast("Заметка не сохранилась в базе (" + formatDbError(e) + ") — нажмите «Сохранить», чтобы не потерять её");
+  } finally {
+    const btnAfter = document.getElementById("btnAddNote");
+    if (btnAfter){ btnAfter.disabled = false; btnAfter.textContent = "Добавить заметку"; }
+  }
 }
 
 async function saveDrawer(){
