@@ -711,6 +711,19 @@ let shipmentIndustryFilter = "all";
 let shipmentSortCol = "order_sum"; // company | manager | division | order_count | order_sum
 let shipmentSortDir = "desc";
 let transferredIndustryFilter = "all";
+
+// Вкладка «Активность менеджеров» — видна только владельцу (Роману), см. OWNER_EMAIL.
+// Показывает, кто из менеджеров (включая менеджеров ведения) когда менял статус
+// или отрасль по каким компаниям — чтобы можно было оценить объём отработанного.
+const OWNER_EMAIL = "fedorov.r@oasiscatalog.com";
+function isOwnerUser(){
+  return !!(CURRENT_USER && (CURRENT_USER.email||"").toLowerCase()===OWNER_EMAIL);
+}
+let activityManagerFilter = "all";
+let activityDateFrom = "";
+let activityDateTo = "";
+let activitySortCol = "at";
+let activitySortDir = "desc";
 const SORT_COLUMNS = [
   {key:"company", label:"Компания"},
   {key:"manager", label:"Менеджер"},
@@ -1194,6 +1207,7 @@ function renderNav(){
     {key:"shipments", label:"Отгрузки", count:null, view:"shipments"},
     {key:"kpi", label:"Дашборд KPI", count:null, view:"kpi"},
   ];
+  if (isOwnerUser()) tabs.push({key:"activity", label:"Активность менеджеров", count:null, view:"activity"});
   const nav = document.getElementById("navrow");
   nav.innerHTML = tabs.map(t=>{
     const active = (t.view==="list" && view==="list" && tabFilter===t.key) || (t.view!=="list" && view===t.view);
@@ -1230,10 +1244,12 @@ function renderWhoAmI(){
 }
 
 function renderMain(){
+  if (view==="activity" && !isOwnerUser()){ view="dormant"; tabFilter="dormant"; }
   if (view==="kpi") return renderKpi();
   if (view==="transfer") return renderTransfer();
   if (view==="transferred") return renderTransferred();
   if (view==="shipments") return renderShipments();
+  if (view==="activity") return renderManagerActivity();
   return renderList();
 }
 
@@ -1818,6 +1834,126 @@ function renderShipments(){
 }
 
 /* =====================================================================
+   АКТИВНОСТЬ МЕНЕДЖЕРОВ — видно только владельцу (см. OWNER_EMAIL).
+   Кто и когда менял статус/отрасль, по каким компаниям — чтобы можно
+   было оценить объём отработанного каждым менеджером (включая
+   менеджеров ведения, например Веряскину Анну).
+   ===================================================================== */
+function renderManagerActivity(){
+  const main = document.getElementById("main");
+  if (!isOwnerUser()){
+    main.innerHTML = `<div class="empty">Раздел недоступен.</div>`;
+    return;
+  }
+
+  const source = Array.from(clients.entries()).map(([id,c])=>Object.assign({id}, c));
+  const allRows = computeManagerActivityRows(source);
+
+  if (!activityDateFrom && !activityDateTo){
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    activityDateFrom = new Date(y,m,1).toISOString().slice(0,10);
+    activityDateTo = new Date(y,m+1,0).toISOString().slice(0,10);
+  }
+
+  const inRange = (at)=>{
+    if (!at) return false;
+    const d = at.slice(0,10);
+    if (activityDateFrom && d < activityDateFrom) return false;
+    if (activityDateTo && d > activityDateTo) return false;
+    return true;
+  };
+  const scoped = allRows.filter(r=> inRange(r.at));
+  const summary = computeManagerActivitySummary(scoped);
+  const managersHere = Array.from(new Set(allRows.map(r=>r.manager))).sort((a,b)=>a.localeCompare(b,"ru"));
+
+  const filtered = scoped
+    .filter(r=> activityManagerFilter==="all" ? true : r.manager===activityManagerFilter)
+    .slice();
+  filtered.sort((a,b)=> compareSortValues(activitySortValue(a,activitySortCol), activitySortValue(b,activitySortCol), activitySortDir));
+
+  const toolbarHtml = `
+    <div class="toolbar">
+      <div class="daterange">
+        <span class="helptext" style="white-space:nowrap;">Период:</span>
+        <input type="date" id="fActFrom" value="${esc(activityDateFrom)}"/>
+        <span class="helptext">—</span>
+        <input type="date" id="fActTo" value="${esc(activityDateTo)}"/>
+      </div>
+      <select id="fActManager">
+        <option value="all">Все менеджеры</option>
+        ${managersHere.map(m=>`<option value="${esc(m)}" ${activityManagerFilter===m?"selected":""}>${esc(m)}</option>`).join("")}
+      </select>
+    </div>`;
+
+  const summaryHtml = `
+    <div class="kpi-card" style="margin-bottom:16px;">
+      <h2>Компаний обработано за период</h2>
+      <div class="helptext" style="margin-top:4px;">Компания считается «обработанной», если в выбранный период менеджер поменял по ней статус или отрасль. Одна и та же компания может быть учтена у нескольких менеджеров, если её вели по очереди.</div>
+      <div class="stats" style="margin-top:10px;">
+        ${summary.length===0 ? `<div class="stat"><b>0</b><span>изменений за период</span></div>` :
+          summary.map(s=>`<div class="stat"><b>${s.companies}</b><span>${esc(s.manager)} — компаний (${s.changes} изм.)</span></div>`).join("")}
+      </div>
+    </div>`;
+
+  const ACT_COLUMNS = [
+    {key:"company", label:"Компания"},
+    {key:"manager", label:"Менеджер"},
+    {key:"field", label:"Что изменил(а)"},
+    {key:"change", label:"Было → Стало"},
+    {key:"at", label:"Когда"},
+  ];
+  const rowsHtml = filtered.map(r=>{
+    return `<tr ${r.clientId?`data-id="${esc(r.clientId)}"`:""}>
+      <td><div class="company">${esc(r.company)}</div><div class="code">${esc(r.code||"без кода")}</div></td>
+      <td class="muted">${esc(r.manager)}</td>
+      <td>${esc(r.field)}</td>
+      <td class="muted">${esc(r.from)} → ${esc(r.to)}</td>
+      <td class="muted">${fmtDateTime(r.at)}</td>
+    </tr>`;
+  }).join("");
+
+  const tableHtml = filtered.length===0 ? `<div class="empty">Нет изменений за выбранный период.</div>` : `
+    <div class="tablewrap"><div class="tscroll">
+      <table>
+        <thead><tr>
+          ${ACT_COLUMNS.map(col=>{
+            const active = activitySortCol===col.key;
+            const arrow = active ? (activitySortDir==="asc" ? " ▲" : " ▼") : "";
+            return `<th class="sortable${active?" sorted":""}" data-sort="${col.key}">${esc(col.label)}${arrow}</th>`;
+          }).join("")}
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div></div>`;
+
+  main.innerHTML = toolbarHtml + summaryHtml + tableHtml;
+
+  document.getElementById("fActFrom").onchange = (e)=>{ activityDateFrom = e.target.value; renderManagerActivity(); };
+  document.getElementById("fActTo").onchange = (e)=>{ activityDateTo = e.target.value; renderManagerActivity(); };
+  document.getElementById("fActManager").onchange = (e)=>{ activityManagerFilter = e.target.value; renderManagerActivity(); };
+  main.querySelectorAll("thead [data-sort]").forEach(th=>{
+    th.onclick = ()=>{
+      const col = th.getAttribute("data-sort");
+      if (activitySortCol===col) activitySortDir = activitySortDir==="asc" ? "desc" : "asc";
+      else { activitySortCol = col; activitySortDir = col==="at" ? "desc" : "asc"; }
+      renderManagerActivity();
+    };
+  });
+  main.querySelectorAll("tbody tr[data-id]").forEach(tr=> tr.onclick = ()=>openDrawer(tr.getAttribute("data-id")));
+}
+function activitySortValue(r, col){
+  switch(col){
+    case "company": return r.company||null;
+    case "manager": return r.manager||null;
+    case "field": return r.field||null;
+    case "change": return (r.to||"");
+    case "at": return r.at||null;
+    default: return null;
+  }
+}
+
+/* =====================================================================
    KPI VIEW — mirrors "KPI по менеджерам"
    ===================================================================== */
 function bucketOf(c){
@@ -1881,6 +2017,50 @@ function computeAccountManagerBreakdown(source){
   rows.sort((a,b)=> b.stats.total - a.stats.total);
   const grandTotal = statsFor(source.filter(c=>c.accountManager));
   return {rows, grandTotal};
+}
+
+/* =====================================================================
+   АКТИВНОСТЬ МЕНЕДЖЕРОВ (только для владельца) — кто и когда поменял
+   статус или отрасль по каждой компании. Собираем из statusHistory
+   (реальные переходы — все записи, кроме самой первой при создании
+   карточки) и changeLog (поле "Отрасль", там уже только правки).
+   ===================================================================== */
+function computeManagerActivityRows(source){
+  const rows = [];
+  source.forEach(c=>{
+    const sh = Array.isArray(c.statusHistory) ? c.statusHistory : [];
+    for (let i=1; i<sh.length; i++){
+      const cur = sh[i], prev = sh[i-1];
+      rows.push({
+        clientId: c.id, company: c.company||"—", code: c.code||"",
+        manager: cur.by || "—", field: "Статус",
+        from: prev.status||"—", to: cur.status||"—", at: cur.at||"",
+      });
+    }
+    const cl = Array.isArray(c.changeLog) ? c.changeLog : [];
+    cl.forEach(ch=>{
+      if (ch.field!=="Отрасль") return;
+      rows.push({
+        clientId: c.id, company: c.company||"—", code: c.code||"",
+        manager: ch.by || "—", field: "Отрасль",
+        from: ch.from||"—", to: ch.to||"—", at: ch.at||"",
+      });
+    });
+  });
+  return rows;
+}
+function computeManagerActivitySummary(rows){
+  const byManager = new Map();
+  rows.forEach(r=>{
+    const key = r.manager || "—";
+    if (!byManager.has(key)) byManager.set(key, {manager:key, companies:new Set(), changes:0});
+    const bucket = byManager.get(key);
+    bucket.companies.add(r.clientId);
+    bucket.changes += 1;
+  });
+  const list = Array.from(byManager.values()).map(b=>({manager:b.manager, companies:b.companies.size, changes:b.changes}));
+  list.sort((a,b)=> b.companies - a.companies);
+  return list;
 }
 
 /* =====================================================================
