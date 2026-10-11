@@ -3769,6 +3769,7 @@ var CSS = '@import url("https://fonts.googleapis.com/css2?family=Philosopher:wgh
 +'.hqFloat{position:absolute;z-index:2;background:var(--pan);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px)}'
 +'#hqScope{left:12px;top:12px;display:flex;padding:4px;gap:4px}'
 +'#hqScope button,#hqZoom button{appearance:none;border:0;background:transparent;color:var(--mut);font:600 12.5px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}'
++'#hqMgr{appearance:auto;background:#0b1122;color:#e9e4d3;border:1px solid rgba(255,210,74,.35);border-radius:8px;padding:6px 8px;font:600 12.5px "IBM Plex Sans",system-ui,sans-serif;max-width:200px;cursor:pointer}#hqMgr.on{background:#ffd24a;color:#1b1405;border-color:#ffd24a}#hqMgr option{background:#0b1122;color:#e9e4d3}'
 +'#hqScope button.on{background:var(--g);color:#1b1405}'
 +'#hqZoom{right:12px;top:12px;display:flex;flex-direction:column;padding:4px}'
 +'#hqZoom button{font-size:18px;padding:4px 11px;color:var(--ink)}'
@@ -3808,7 +3809,7 @@ var CSS = '@import url("https://fonts.googleapis.com/css2?family=Philosopher:wgh
 +'#hqCard .bt{margin-top:10px;appearance:none;border:1px solid var(--gd);background:rgba(255,210,74,.12);color:var(--g);font:600 12.5px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}'
 +'.hqCmd{flex:1 1 220px}.hqCmd b,.hqStreak b{font-size:18px}.hqStreak{flex:1 1 200px}'
 +'.hqDots{display:flex;gap:3px;margin-top:5px}.hqDots i{width:9px;height:9px;border-radius:2px;background:rgba(255,255,255,.1)}.hqDots i.ok{background:#ff9a3c;box-shadow:0 0 6px rgba(255,154,60,.7)}.hqDots i.td{outline:1px dashed var(--g)}'
-+'#hqBanner{position:absolute;left:50%;top:14px;transform:translate(-50%,-20px);z-index:4;padding:10px 20px;border-radius:12px;background:linear-gradient(#3a2d0a,#1d1604);border:1px solid var(--g);color:#ffe9a8;font-family:"Philosopher",serif;font-size:18px;opacity:0;transition:.4s;pointer-events:none;max-width:90%;text-align:center;box-shadow:0 0 30px rgba(255,210,74,.35)}#hqBanner.show{opacity:1;transform:translate(-50%,0)}'
++'#hqBanner{position:absolute;left:50%;top:62px;transform:translate(-50%,-20px);z-index:4;padding:10px 20px;border-radius:12px;background:linear-gradient(#3a2d0a,#1d1604);border:1px solid var(--g);color:#ffe9a8;font-family:"Philosopher",serif;font-size:18px;opacity:0;transition:.4s;pointer-events:none;max-width:90%;text-align:center;box-shadow:0 0 30px rgba(255,210,74,.35)}#hqBanner.show{opacity:1;transform:translate(-50%,0)}'
 +'@media (max-width:900px){#hqBody{grid-template-columns:1fr}#hqSide{max-height:none;border-left:0;border-top:1px solid var(--line)}#hqMapWrap{min-height:440px}}';
 
 function buildDom(){
@@ -3818,7 +3819,7 @@ function buildDom(){
    '<div id="hqBar"></div>'
   +'<div id="hqBody">'
   +  '<div id="hqMapWrap"><canvas id="hqCanvas"></canvas><div id="hqStatus">Разворачиваем карту…</div>'
-  +    '<div class="hqFloat" id="hqScope"><button data-s="all" class="on" data-tip="<b>Вся империя</b>Карта, квесты и ресурсы по всем клиентам отдела.">🌍 Вся империя</button><button data-s="mine" data-tip="<b>Мои земли</b>Только клиенты, где вы менеджер или менеджер ведения. Остальные гексы затемняются.">🚩 Мои земли</button></div>'
+  +    '<div class="hqFloat" id="hqScope"><button data-s="all" class="on" data-tip="<b>Вся империя</b>Карта, квесты и ресурсы по всем клиентам отдела.">🌍 Вся империя</button><button data-s="mine" data-tip="<b>Мои земли</b>Только клиенты, где вы менеджер или менеджер ведения. Остальные гексы затемняются.">🚩 Мои земли</button><select id="hqMgr" data-tip="<b>Выбор бойца</b>Показать карту, квесты и ресурсы только по одному менеджеру."></select></div>'
   +    '<div class="hqFloat" id="hqZoom"><button data-z="in" data-tip="Приблизить карту">＋</button><button data-z="out" data-tip="Отдалить карту">－</button><button data-z="fit" data-tip="Показать всю карту" style="font-size:14px">⌂</button><button data-z="ref" data-tip="Обновить данные из CRM" style="font-size:14px">⟳</button></div>'
   +    '<div class="hqFloat" id="hqLegend" data-tip="<b>Легенда</b>Цвет гекса показывает состояние клиента. Золотая искра в тумане — клиент сегмента A, самый ценный для первого контакта."></div><div id="hqBanner"></div>'
   +    '<div class="hqFloat" id="hqCard"></div>'
@@ -3904,6 +3905,9 @@ function renderHud(){
   var feed=S.events.filter(function(e){ var tl=S.byId[e.id]; return FE[e.status]&&tl&&inScope(tl); }).slice(0,10);
   document.getElementById('hqFeed').innerHTML=feed.length?feed.map(function(e){ var f=FE[e.status], dd=e.day.slice(8)+'.'+e.day.slice(5,7); return '<div class="hqItem" data-id="'+esc(e.id)+'"><span>'+f[0]+' '+esc(e.company)+'</span><span>'+dd+'</span></div>'; }).join(''):'<div style="color:var(--mut);font-size:12px">Пока тихо</div>';
   document.getElementById('hqFeed').onclick=function(e){ var it=e.target.closest('.hqItem'); if(it) flyTo(it.getAttribute('data-id'),true); };
+  var mg=document.getElementById('hqMgr'), cur=(S.scope.slice(0,2)==='m:'||S.scope.slice(0,2)==='a:')?S.scope:'';
+  mg.innerHTML='<option value="">👤 Выбрать бойца</option>'+names.map(function(m){ return '<option value="m:'+esc(m)+'"'+(cur==='m:'+m?' selected':'')+'>⚔️ '+esc(m)+'</option>'; }).join('')+Object.keys(ac).map(function(a){ return '<option value="a:'+esc(a)+'"'+(cur==='a:'+a?' selected':'')+'>🛡️ '+esc(a)+' (ведение)</option>'; }).join('');
+  mg.classList.toggle('on',!!cur); mg.onchange=function(){ setScope(mg.value||'all'); };
   document.getElementById('hqSquads').innerHTML=html||'<div style="color:var(--mut);font-size:12px">Нет данных</div>';
 }
 
