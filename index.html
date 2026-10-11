@@ -3729,7 +3729,8 @@ async function loadData(){
 function setStatus(t){ var el=document.getElementById('hqStatus'); if(el){ el.textContent=t; el.style.display=t?'block':'none'; } }
 
 /* ---------- производные величины ---------- */
-function inScope(t){ if(S.scope==='all') return true; return t.c.manager===S.me||t.c.accountManager===S.me; }
+function inScope(t){ var sc=S.scope; if(sc==='all') return true; if(sc==='mine') return t.c.manager===S.me||t.c.accountManager===S.me; if(sc.slice(0,2)==='m:') return t.c.manager===sc.slice(2); if(sc.slice(0,2)==='a:') return t.c.accountManager===sc.slice(2); return true; }
+function setScope(sc){ S.scope=sc; S.quest=null; document.querySelectorAll('#hqScope button').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-s')===sc); }); renderHud(); }
 function levelInfo(n){ var i=0; for(var k=0;k<LEVELS.length;k++) if(n>=LEVELS[k][0]) i=k; var next=LEVELS[i+1]; return {name:LEVELS[i][1], idx:i, next:next?next[1]:null, from:LEVELS[i][0], to:next?next[0]:null}; }
 function questList(){
   var T=S.tiles.filter(inScope), q=[];
@@ -3773,8 +3774,8 @@ var CSS = '@import url("https://fonts.googleapis.com/css2?family=Philosopher:wgh
 +'#hqZoom button{font-size:18px;padding:4px 11px;color:var(--ink)}'
 +'#hqLegend{left:12px;bottom:12px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:5px}'
 +'#hqLegend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-2px}'
-+'#hqTip{position:fixed;z-index:80;pointer-events:none;padding:9px 12px;border-radius:10px;background:rgba(10,14,26,.96);border:1px solid var(--line);font-size:12.5px;max-width:260px;opacity:0;transition:opacity .1s}'
-+'#hqTip small{display:block;color:var(--mut)}#hqTip.show{opacity:1}#hqTip b{font-family:"Philosopher",serif;font-size:15px;color:var(--g);display:block;margin-bottom:3px}'
++'#hqTip{position:fixed;z-index:9999;pointer-events:none;padding:10px 13px;border-radius:10px;background:#0b1122;border:1px solid rgba(255,210,74,.5);box-shadow:0 8px 24px rgba(0,0,0,.5);color:#e9e4d3;font:12.5px/1.45 "IBM Plex Sans",system-ui,sans-serif;max-width:280px;opacity:0;transition:opacity .1s}'
++'#hqTip.show{opacity:1}#hqTip b{font-family:"Philosopher",serif;font-size:15px;color:#ffd24a;display:block;margin-bottom:3px}'
 +'#hqSide{background:linear-gradient(#10172b,#0b1122);border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:calc(100vh - 170px)}'
 +'#hqSide h3{font-family:"Philosopher",serif;font-size:17px;margin:0 0 8px;color:var(--g);display:flex;align-items:center;gap:8px}'
 +'#hqSide h3:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}'
@@ -3792,6 +3793,7 @@ var CSS = '@import url("https://fonts.googleapis.com/css2?family=Philosopher:wgh
 +'.hqItem span:last-child{color:var(--mut);white-space:nowrap}'
 +'.hqSq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.025);margin-bottom:8px}'
 +'.hqSq .h{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}'
++'.hqSq{cursor:pointer;transition:.15s}.hqSq:hover{background:rgba(255,210,74,.08)}.hqSq.sel{border-color:#ffd24a;background:rgba(255,210,74,.12);box-shadow:0 0 12px rgba(255,210,74,.25)}'
 +'.hqSq .flag{width:10px;height:22px;border-radius:2px 6px 6px 2px;flex:none}'
 +'.hqSq .role{font-size:11px;color:var(--mut);font-weight:400}'
 +'.hqSq .row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-top:6px}'
@@ -3821,13 +3823,13 @@ function buildDom(){
   +    '<div class="hqFloat" id="hqLegend" data-tip="<b>Легенда</b>Цвет гекса показывает состояние клиента. Золотая искра в тумане — клиент сегмента A, самый ценный для первого контакта."></div><div id="hqBanner"></div>'
   +    '<div class="hqFloat" id="hqCard"></div>'
   +  '</div>'
-  +  '<aside id="hqSide"><div><h3 data-tip="<b>Квесты на сегодня</b>Список задач, собранный из данных CRM. Когда задач не осталось, на карточке появляется галочка.">📜 Квесты на сегодня</h3><div id="hqQuests"></div></div><div><h3 data-tip="<b>Хроника</b>Последние смены статусов: кто взял землю, передал в дивизион, вступил в бой или потерял клиента. Нажмите на запись, чтобы перейти к клиенту на карте.">📰 Хроника</h3><div id="hqFeed"></div></div><div><h3 data-tip="<b>Отряды</b>Команда: сколько клиентов у каждого менеджера, сколько взято, сколько на фронте и какая конверсия.">🛡️ Отряды</h3><div id="hqSquads"></div></div></aside>'
+  +  '<aside id="hqSide"><div><h3 data-tip="<b>Квесты на сегодня</b>Список задач, собранный из данных CRM. Когда задач не осталось, на карточке появляется галочка.">📜 Квесты на сегодня</h3><div id="hqQuests"></div></div><div><h3 data-tip="<b>Хроника</b>Последние смены статусов: кто взял землю, передал в дивизион, вступил в бой или потерял клиента. Нажмите на запись, чтобы перейти к клиенту на карте.">📰 Хроника</h3><div id="hqFeed"></div></div><div><h3 data-tip="<b>Отряды</b>Команда: сколько клиентов у каждого менеджера, сколько взято, сколько на фронте и какая конверсия. Нажмите на бойца, чтобы увидеть только его земли.">🛡️ Отряды</h3><div id="hqSquads"></div></div></aside>'
   +'</div><div id="hqTip"></div>';
   var app=document.getElementById('app')||document.body; app.appendChild(root);
   var tip=root.querySelector('#hqTip'); document.body.appendChild(tip);
 
-  root.querySelector('#hqScope').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; S.scope=b.getAttribute('data-s');
-    root.querySelectorAll('#hqScope button').forEach(function(x){x.classList.toggle('on',x===b);}); S.quest=null; renderHud(); };
+  root.querySelector('#hqScope').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; setScope(b.getAttribute('data-s')); };
+  root.querySelector('#hqSquads').onclick=function(e){ var c=e.target.closest('.hqSq'); if(!c) return; var sc=c.getAttribute('data-scope'); setScope(S.scope===sc?'all':sc); };
   root.querySelector('#hqZoom').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; var z=b.getAttribute('data-z');
     if(z==='in') zoomAt(S.W/2,S.H/2,1.35); else if(z==='out') zoomAt(S.W/2,S.H/2,1/1.35); else if(z==='fit') fitCamera(); else if(z==='ref'){ S.loading=false; loadData(); } };
   var tipEl=document.getElementById('hqTip');
@@ -3891,15 +3893,15 @@ function renderHud(){
   var html=names.map(function(m,i){
     var s=sq[m], cv=s.empire+s.colony, role=(m===S.me)?'Командующий (вы)':'Отряд разведки';
     var seg=function(k,c){ return '<div style="width:'+(s.n?s[k]/s.n*100:0)+'%;background:'+c+'"></div>'; };
-    return '<div class="hqSq" data-tip="<b>Отряд менеджера</b>Клиенты, которых привёл менеджер. Полоса: зелёный — взято, фиолетовый — в дивизионе, оранжевый — фронт, тёмный — туман. Конв. — доля взятых.."><div class="h"><div class="flag" style="background:'+SQUADCOL[i%SQUADCOL.length]+'"></div><div>'+esc(m)+'<div class="role">'+role+'</div></div></div>'
+    return '<div class="hqSq'+(S.scope==='m:'+m?' sel':'')+'" data-scope="m:'+esc(m)+'" data-tip="<b>Отряд: '+esc(m)+'</b>Клиенты, которых привёл менеджер. Нажмите, чтобы смотреть карту, квесты и ресурсы только по этому бойцу, повторное нажатие вернёт всю империю. Полоса: зелёный — взято, фиолетовый — в дивизионе, оранжевый — фронт, тёмный — туман."><div class="h"><div class="flag" style="background:'+SQUADCOL[i%SQUADCOL.length]+'"></div><div>'+esc(m)+'<div class="role">'+role+'</div></div></div>'
       +'<div class="hqStack">'+seg('empire',CAT.empire.col)+seg('colony',CAT.colony.col)+seg('front',CAT.front.col)+seg('ruin',CAT.ruin.col)+seg('fog','#3a4566')+'</div>'
       +'<div class="row"><span>Земель: <b>'+s.n+'</b></span><span>Взято: <b>'+cv+'</b></span><span>Фронт: <b>'+s.front+'</b></span><span>Конв.: <b>'+(s.n?Math.round(cv/s.n*100):0)+'%</b></span></div></div>';
   }).join('');
   html+=Object.keys(ac).sort(function(a,b){return ac[b].n-ac[a].n;}).map(function(a){
-    var s=ac[a]; return '<div class="hqSq" data-tip="<b>Гарнизон</b>Клиенты, которых ведёт менеджер ведения: сколько под опекой, сколько активных и передано в дивизион."><div class="h"><div class="flag" style="background:#6ee7a0"></div><div>'+esc(a)+'<div class="role">Гарнизон — ведение клиентов</div></div></div><div class="row"><span>Под опекой: <b>'+s.n+'</b></span><span>Активных: <b>'+s.empire+'</b></span><span>В дивизионе: <b>'+s.colony+'</b></span></div></div>';
+    var s=ac[a]; return '<div class="hqSq'+(S.scope==='a:'+a?' sel':'')+'" data-scope="a:'+esc(a)+'" data-tip="<b>Гарнизон: '+esc(a)+'</b>Клиенты, которых ведёт менеджер ведения. Нажмите, чтобы смотреть только по этому бойцу, повторное нажатие вернёт всю империю."><div class="h"><div class="flag" style="background:#6ee7a0"></div><div>'+esc(a)+'<div class="role">Гарнизон — ведение клиентов</div></div></div><div class="row"><span>Под опекой: <b>'+s.n+'</b></span><span>Активных: <b>'+s.empire+'</b></span><span>В дивизионе: <b>'+s.colony+'</b></span></div></div>';
   }).join('');
   var FE={'Активен (сделал заказ)':['🏰','взял землю'],'Передан в дивизион':['🚩','передан в дивизион'],'В работе':['⚔️','вступил в бой'],'Отказ':['☠️','потерян'],'Не дозвонился':['📵','не дозвонился'],'Конечный заказчик':['🏰','конечный заказчик']};
-  var feed=S.events.filter(function(e){return FE[e.status]&&(S.scope==='all'||e.by===S.me);}).slice(0,10);
+  var feed=S.events.filter(function(e){ var tl=S.byId[e.id]; return FE[e.status]&&tl&&inScope(tl); }).slice(0,10);
   document.getElementById('hqFeed').innerHTML=feed.length?feed.map(function(e){ var f=FE[e.status], dd=e.day.slice(8)+'.'+e.day.slice(5,7); return '<div class="hqItem" data-id="'+esc(e.id)+'"><span>'+f[0]+' '+esc(e.company)+'</span><span>'+dd+'</span></div>'; }).join(''):'<div style="color:var(--mut);font-size:12px">Пока тихо</div>';
   document.getElementById('hqFeed').onclick=function(e){ var it=e.target.closest('.hqItem'); if(it) flyTo(it.getAttribute('data-id'),true); };
   document.getElementById('hqSquads').innerHTML=html||'<div style="color:var(--mut);font-size:12px">Нет данных</div>';
