@@ -3638,7 +3638,7 @@ function makeLands(minX,maxX,minY,maxY){
 }
 function fmtPot(v){ return Math.round(v/1e6)+' млн ₽'; }
 function landAt(px,py){ if(!S.lands) return null; var w=toWorld(px,py); for(var i=0;i<S.lands.length;i++){ var l=S.lands[i]; var dx=w.x-l.cx, dy=w.y-l.cy; if(dx*dx+dy*dy<l.r*l.r*.8) return l; } return null; }
-function layout(list){
+function layoutGroup(list){
   var n=list.length, R=Math.ceil(Math.sqrt(n/2.6))+4, slots=[];
   for(var q=-R;q<=R;q++) for(var r=-R;r<=R;r++){
     var s=-q-r; var d=Math.max(Math.abs(q),Math.abs(r),Math.abs(s));
@@ -3660,12 +3660,31 @@ function layout(list){
     used[idx]=1; out[idx]=t;
   });
   var ci=0; for(var i=0;i<n;i++){ if(!out[i]) out[i]=core[ci++]; }
+  if(core.length&&core[0].cat==='empire') core[0].capital=true;
   var minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
   out.forEach(function(t,i){ var s=slots[i]; t.q=s.q; t.r=s.r; t.x=s.x; t.y=s.y;
     minX=Math.min(minX,s.x);maxX=Math.max(maxX,s.x);minY=Math.min(minY,s.y);maxY=Math.max(maxY,s.y); });
-  S.bounds={minX:minX-HEX*3,maxX:maxX+HEX*3,minY:minY-HEX*3,maxY:maxY+HEX*3};
-  S.lands=makeLands(minX,maxX,minY,maxY);
-  return out;
+  return {out:out,minX:minX,maxX:maxX,minY:minY,maxY:maxY};
+}
+// у каждого менеджера своя земля (материк); не-админ видит только свою
+function layout(list){
+  var map={}, names=[];
+  list.forEach(function(t){ var k=S.admin?(t.c.manager||'Без командира'):S.me; if(!map[k]){ map[k]=[]; names.push(k); } map[k].push(t); });
+  names.sort(function(a,b){ return map[b].length-map[a].length; });
+  var SX=HEX*Math.sqrt(3), SY=HEX*1.5, cursor=0, all=[], gmin=1e9,gmax=-1e9,ymin=1e9,ymax=-1e9;
+  S.groups=[];
+  names.forEach(function(nm,gi){
+    var g=layoutGroup(map[nm]);
+    var dr=-Math.round(((g.minY+g.maxY)/2)/SY), dq=Math.ceil((cursor-g.minX)/SX-dr/2);
+    var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9, conq=0;
+    g.out.forEach(function(t){ t.q+=dq; t.r+=dr; var p=hexXY(t.q,t.r); t.x=p.x; t.y=p.y; t.group=nm;
+      x0=Math.min(x0,t.x);x1=Math.max(x1,t.x);y0=Math.min(y0,t.y);y1=Math.max(y1,t.y); if(t.cat==='empire'||t.cat==='colony') conq++; all.push(t); });
+    S.groups.push({name:nm,idx:gi,n:g.out.length,conq:conq,minX:x0-HEX,maxX:x1+HEX,minY:y0-HEX,maxY:y1+HEX,col:SQUADCOL[gi%SQUADCOL.length]});
+    cursor=x1+HEX*10; gmin=Math.min(gmin,x0); gmax=Math.max(gmax,x1); ymin=Math.min(ymin,y0); ymax=Math.max(ymax,y1);
+  });
+  S.bounds={minX:gmin-HEX*3,maxX:gmax+HEX*3,minY:ymin-HEX*4,maxY:ymax+HEX*3};
+  S.lands=S.admin?makeLands(gmin,gmax,ymin,ymax):[];
+  return all;
 }
 
 /* ---------- игровая логика: опыт, серия, хроника ---------- */
@@ -3716,6 +3735,7 @@ async function loadData(){
   try{
     var rows=await fetchAll('clients','id,data');
     var cl=rows.map(function(r){ var c=r.data||{}; c._id=r.id; return c; });
+    if(!S.admin) cl=cl.filter(function(c){ return c.manager===S.me||c.accountManager===S.me; });
     var ship=null;
     try{
       var sh=await fetchAll('shipments','period_from,period_to,order_sum,order_count,client_code');
@@ -3747,7 +3767,7 @@ function setStatus(t){ var el=document.getElementById('hqStatus'); if(el){ el.te
 
 /* ---------- производные величины ---------- */
 function inScope(t){ var sc=S.scope; if(sc==='all') return true; if(sc==='mine') return t.c.manager===S.me||t.c.accountManager===S.me; if(sc.slice(0,2)==='m:') return t.c.manager===sc.slice(2); if(sc.slice(0,2)==='a:') return t.c.accountManager===sc.slice(2); return true; }
-function setScope(sc){ S.scope=sc; S.quest=null; document.querySelectorAll('#hqScope button').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-s')===sc); }); renderHud(); }
+function setScope(sc){ S.scope=sc; S.quest=null; if(sc.slice(0,2)==='m:') focusGroup(sc.slice(2)); else if(sc==='mine'&&S.admin) focusGroup(S.me); else if(sc==='all') fitFly(); document.querySelectorAll('#hqScope button').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-s')===sc); }); renderHud(); }
 function levelInfo(n){ var i=0; for(var k=0;k<LEVELS.length;k++) if(n>=LEVELS[k][0]) i=k; var next=LEVELS[i+1]; return {name:LEVELS[i][1], idx:i, next:next?next[1]:null, from:LEVELS[i][0], to:next?next[0]:null}; }
 function questList(){
   var T=S.tiles.filter(inScope), q=[];
@@ -3857,6 +3877,7 @@ function buildDom(){
     tipEl.style.left=Math.max(8,x)+'px'; tipEl.style.top=(e.clientY+16)+'px'; tipEl.classList.add('show');
   });
   root.addEventListener('mouseleave',function(){ tipEl.classList.remove('show'); });
+  if(!S.admin){ root.querySelector('#hqScope').style.display='none'; root.querySelector('#hqSquads').parentNode.style.display='none'; }
   wireCanvas();
   if(window.ResizeObserver) new ResizeObserver(resize).observe(root.querySelector('#hqMapWrap'));
   window.addEventListener('resize',resize);
@@ -3880,7 +3901,7 @@ function renderHud(){
   var bar=document.getElementById('hqBar');
   bar.innerHTML=
     gameTiles()+'<div class="hqRes hqRank" data-tip="<b>Ранг владений</b>Зависит от числа взятых территорий: клиенты со статусом «Активен» и «Передан в дивизион». Стоянка → Деревня → Город → Княжество → Королевство → Империя."><div style="flex:1"><div class="top"><span>Ранг владений</span><span>'+conquered+(lv.to?' / '+lv.to:'')+'</span></div><div class="nm">👑 '+lv.name+'</div><div class="hqBarBg"><div class="hqBarFg" style="width:'+prog+'%"></div></div>'+(lv.next?'<div style="font-size:11px;color:var(--mut);margin-top:4px">До «'+lv.next+'»: '+(lv.to-conquered)+' терр.</div>':'<div style="font-size:11px;color:var(--mut);margin-top:4px">Высший ранг достигнут</div>')+'</div></div>'
-   +res('🧭',fmtPot(750e6),'Потенциал в перспективе','<b>Перспективные земли</b>Каналы, где клиентов пока нет: Event — 450 млн ₽ и другие каналы — 300 млн ₽. На карте это острова справа.')
+   +(S.admin?res('🧭',fmtPot(750e6),'Потенциал в перспективе','<b>Перспективные земли</b>Каналы, где клиентов пока нет: Event — 450 млн ₽ и другие каналы — 300 млн ₽. На карте это острова справа.'):'')
    +res('💰',goldTxt,goldSub,'<b>Казна</b>Сумма отгрузок всех клиентов за последний загруженный период (вкладка «Отгрузки»). Прочерк — отгрузки ещё не загружены.')+res('🏰',conquered+' <small style="font-size:13px;color:var(--mut)">из '+tot+'</small>','Территорий взято','<b>Территории</b>Сколько клиентов уже купили: статус «Активен» или «Передан в дивизион». Число справа — все клиенты в выбранном режиме.')
    +res('⚔️',by.front,'Войск на фронте','<b>Передовая</b>Клиенты в работе: статусы «В работе» и «Не дозвонился». Это те, с кем идёт активная борьба за первый заказ.')+res('🌫️',fogPct+'%','Земли в тумане','<b>Туман войны</b>Доля клиентов со статусом «Новый», с которыми ещё не начинали работу. Чем меньше тумана, тем лучше разведана база.')+res('📈',conv+'%','Конверсия в заказ','<b>Конверсия</b>Взятые территории, делённые на всех клиентов. Показывает, какая доля базы дошла до заказа.');
   function res(ic,v,l,tip){ return '<div class="hqRes" data-tip="'+tip+'"><div class="ic">'+ic+'</div><div><b>'+v+'</b><span>'+l+'</span></div></div>'; }
@@ -3935,6 +3956,8 @@ function resize(){
   var dpr=Math.min(window.devicePixelRatio||1,2); cv.width=w*dpr; cv.height=h*dpr; S.W=w; S.H=h; S.dpr=dpr;
   if(S.ready && !S.fitted) fitCamera();
 }
+function focusGroup(nm){ var g=(S.groups||[]).filter(function(x){return x.name===nm;})[0]; if(!g||!S.W) return; var w=g.maxX-g.minX+HEX*6, h=g.maxY-g.minY+HEX*8, k=Math.min(S.W/w,S.H/h)*.95; fly={t0:performance.now(),dur:800,from:{x:S.cam.x,y:S.cam.y,k:S.cam.k},to:{k:k,x:S.W/2-(g.minX+g.maxX)/2*k,y:S.H/2-(g.minY+g.maxY)/2*k}}; }
+function fitFly(){ if(!S.bounds||!S.W) return; var b=S.bounds, k=Math.min(S.W/(b.maxX-b.minX),S.H/(b.maxY-b.minY))*.96; fly={t0:performance.now(),dur:800,from:{x:S.cam.x,y:S.cam.y,k:S.cam.k},to:{k:k,x:S.W/2-(b.minX+b.maxX)/2*k,y:S.H/2-(b.minY+b.maxY)/2*k}}; }
 function fitCamera(){
   if(!S.bounds||!S.W) return; var b=S.bounds, k=Math.min(S.W/(b.maxX-b.minX),S.H/(b.maxY-b.minY))*.96;
   S.cam.k=k; S.cam.x=S.W/2-(b.minX+b.maxX)/2*k; S.cam.y=S.H/2-(b.minY+b.maxY)/2*k; S.fitted=true; S.minK=k*.8;
@@ -4039,7 +4062,7 @@ function frame(now){
     var al=inScope(u)?1:.28; ctx.globalAlpha=al;
     if(u.cat==='fog'&&u.seg==='A'){ var tw=.5+.5*Math.sin(now/500+u.q*2.3+u.r*1.1); ctx.fillStyle='rgba(255,210,74,'+(.35+.55*tw)+')'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*(.16+.12*tw),0,6.283); ctx.fill(); ctx.fillStyle='rgba(255,210,74,'+(.12*tw)+')'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*.6,0,6.283); ctx.fill(); }
     else if(u.cat==='fog'&&u.seg==='B'&&zoomIn){ ctx.fillStyle='rgba(127,183,255,.55)'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*.12,0,6.283); ctx.fill(); }
-    var capital=(j===0&&u.cat==='empire');
+    var capital=!!u.capital;
     if(capital||(u.cat!=='fog'&&c.k>1.5)||(u.cat==='ruin'&&c.k>1.1)){
       var ic=capital?'🏰':CAT[u.cat].ic; ctx.font=(capital?HEX*1.9:HEX*1.05)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ic,u.x,u.y+(capital?-HEX*.1:HEX*.05));
     }
@@ -4076,13 +4099,16 @@ function drawLandLabels(ctx){
 }
 function drawLabels(ctx){
   drawLandLabels(ctx);
-  if(!ZONE){ ZONE={}; ['empire','colony','front','fog'].forEach(function(k){ var a=S.tiles.filter(function(t){return t.cat===k;}); if(!a.length) return; var x=0,y=0; a.forEach(function(t){x+=t.x;y+=t.y;}); ZONE[k]={x:x/a.length,y:y/a.length}; }); if(ZONE.fog){ var my=-1e9; S.tiles.forEach(function(t){ if(t.y>my) my=t.y; }); ZONE.fog.y=my+HEX*1.5; } }
-  var names={empire:'Земли Империи',colony:'Колонии',front:'Передовая',fog:'Туманные земли'};
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  Object.keys(ZONE).forEach(function(k){ var z=ZONE[k], px=z.x*S.cam.k+S.cam.x, py=z.y*S.cam.k+S.cam.y; if(px<-50||px>S.W+50||py<-30||py>S.H+30||S.cam.k>(S.minK||1)*2.4) return;
-    var fs=Math.max(11,Math.min(26,HEX*S.cam.k*1.6)); ctx.font='700 '+fs+'px Philosopher,serif'; ctx.lineWidth=4; ctx.strokeStyle='rgba(5,8,18,.85)'; ctx.fillStyle=k==='fog'?'rgba(200,212,245,.8)':'#ffe9a8'; var txt=names[k].toUpperCase().split('').join(' ');
-    if(k==='colony'||k==='front'){ return; }
-    ctx.strokeText(txt,px,py); ctx.fillText(txt,px,py); });
+  (S.groups||[]).forEach(function(g){
+    var px=(g.minX+g.maxX)/2*S.cam.k+S.cam.x, py=g.minY*S.cam.k+S.cam.y-HEX*S.cam.k*1.2;
+    if(px<-250||px>S.W+250||py<-40||py>S.H+60) return;
+    var fs=Math.max(13,Math.min(26,HEX*S.cam.k*1.7)), dim=inScope({c:{manager:g.name,accountManager:''}})||S.scope==='all'||S.scope==='mine'&&g.name===S.me?1:.5;
+    ctx.globalAlpha=dim; ctx.font='700 '+fs+'px Philosopher,serif'; ctx.lineWidth=4; ctx.strokeStyle='rgba(5,8,18,.9)'; ctx.fillStyle=g.col;
+    var t='ЗЕМЛИ · '+g.name.toUpperCase(); ctx.strokeText(t,px,py); ctx.fillText(t,px,py);
+    ctx.font='600 '+Math.max(11,fs*.72)+'px "IBM Plex Sans",sans-serif'; ctx.fillStyle='#e9e4d3'; var t2=g.n+' земель · взято '+g.conq+' · туман '+Math.round((1-0)*0+0)+'';
+    t2=g.n+' земель · взято '+g.conq; ctx.strokeText(t2,px,py+fs*1.15); ctx.fillText(t2,px,py+fs*1.15); ctx.globalAlpha=1;
+  });
 }
 
 /* ---------- жизненный цикл / навигация ---------- */
@@ -4100,7 +4126,7 @@ function closeHq(){
 }
 function markNav(){
   var nav=document.getElementById('navrow'); if(!nav) return; var mine=nav.querySelector('[data-hq]');
-  if(!mine){ mine=document.createElement('button'); mine.className='navbtn'; mine.setAttribute('data-hq','1'); mine.textContent='⚔️ Штаб'; mine.style.marginLeft='auto'; nav.appendChild(mine); }
+  if(!mine){ mine=document.createElement('button'); mine.className='navbtn'; mine.setAttribute('data-hq','1'); mine.textContent=S.admin?'⚔️ Штаб':'🗺️ Моя земля'; mine.style.marginLeft='auto'; nav.appendChild(mine); }
   nav.querySelectorAll('.navbtn').forEach(function(b){ if(b!==mine) { if(S.open) b.classList.remove('active'); } });
   mine.classList.toggle('active',S.open);
 }
@@ -4117,9 +4143,10 @@ function startNav(){
 
 async function init(){
   async function check(){
-    var r=await sb.auth.getSession(); var s=r&&r.data&&r.data.session; if(!s||!s.user||s.user.email!==OWNER_EMAIL) return;
-    if(S.allowed) return; S.allowed=true;
-    try{ var m=await sb.from('managers').select('display_name').eq('email',s.user.email).maybeSingle(); S.me=(m&&m.data&&m.data.display_name)||'Фёдоров Роман'; }catch(e){ S.me='Фёдоров Роман'; }
+    var r=await sb.auth.getSession(); var ses=r&&r.data&&r.data.session; if(!ses||!ses.user||S.allowed) return;
+    var m=null; try{ var q=await sb.from('managers').select('display_name,role').eq('email',ses.user.email).maybeSingle(); m=q&&q.data; }catch(e){}
+    if(!m||!m.display_name) return;
+    S.allowed=true; S.me=m.display_name; S.admin=(m.role==='admin'); if(!S.admin) S.scope='mine';
     buildDom(); startNav();
   }
   await check();
