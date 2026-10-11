@@ -3551,4 +3551,542 @@ boot();
 })();
 </script>
 
+
+<script>
+/* =====================================================================
+   ШТАБ — личная страница Романа в стиле стратегии (карта мира, туман войны).
+   Самодостаточный модуль: сам добавляет вкладку «Штаб» в навигацию CRM,
+   сам читает клиентов/отгрузки из Supabase. Видна только владельцу (по email).
+   ===================================================================== */
+(function(){
+'use strict';
+var OWNER_EMAIL = 'fedorov.r@oasiscatalog.com';
+var SB_URL = 'https://wglvwfusdlonkfbchmpe.supabase.co';
+var SB_KEY = 'sb_publishable_JOo52vl_iKr8hNlYaWhAqQ_Ixa1a-jh';
+if (!window.supabase || !document.getElementById('navrow')) return;
+var sb = window.supabase.createClient(SB_URL, SB_KEY);
+
+/* ---------- справочники скоринга (копия из CRM) ---------- */
+var IND = {"РА полного цикла":[15,"С"],"Производственная компания":[15,"Н"],"Полиграфия":[15,"С"],"Сувенирная компания":[15,"С"],"Рекламные агентства":[15,"С"],"Типография":[5,"С"],"EVENT":[5,"Н"],"BTL":[5,"Н"],"Организация выставок и конференций":[5,"Н"],"Выставочная компания":[5,"Н"],"Наружная реклама":[5,"Н"],"Интернет-магазин":[5,"Н"],"Дизайн-студия":[5,"Н"],"PR агентство":[5,"Н"],"Издательство":[5,"Н"],"Швейное производство":[5,"Н"],"Не указано":[0,"С"],"РА с организацией поставок под заказ":[15,"С"],"РА с узким производством сувениров":[15,"С"],"Наружка":[5,"Н"],"текстиль производство":[5,"Н"],"интернет-магазин текстильных товаро":[5,"Н"],"Швейное предприятие":[5,"Н"]};
+var SIZES = {"Крупная — штат 20+ человек или есть своё производство/цех":15,"Средняя — штат 5–19 человек":8,"Микро / ИП — штат 1–4 человека":3};
+var VOLS = {"Высокий — от 3 млн ₽/год":25,"Средний — 1–3 млн ₽/год":15,"Низкий — до 1 млн ₽/год или закупают эпизодически":5,"Неизвестен — объём не выяснили":0};
+var FLOWH = {"Входящая заявка — < 2 месяцев с обращения":15,"Исходящий — менеджер нашёл и квалифицировал сам":15,"Входящая заявка — 2+ месяцев, контакта не было":8};
+function indPts(n){ var v=IND[n]; return v?v[0]:5; }
+function indStd(n){ var v=IND[n]; return v?v[1]==='С':true; }
+function monthsBetween(iso){ if(!iso) return null; var f=new Date(iso+'T00:00:00'),t=new Date(); if(isNaN(f)) return null; var m=(t.getFullYear()-f.getFullYear())*12+(t.getMonth()-f.getMonth()); if(t.getDate()<f.getDate()) m--; return Math.max(0,m); }
+function histPts(c){
+  if(c.tab==='dormant'){ var m=monthsBetween(c.registrationDate); if(m===null) return 0; return m<=2?20:m<=6?12:m<=24?6:2; }
+  return FLOWH[c.flowHistory]||0;
+}
+function score(c){
+  var e=c.engagement||{};
+  return indPts(c.industry)+(SIZES[c.companySize]||0)+(VOLS[c.potentialVolume]||0)+(e.responded?10:0)+(e.hadCall?10:0)+(e.requestedKp?5:0)+histPts(c);
+}
+function seg(t){ return t>=70?'A':t>=40?'B':t>=20?'C':'D'; }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function daysSince(iso){ if(!iso) return null; var d=new Date(iso+'T00:00:00'); if(isNaN(d)) return null; return Math.round((new Date(todayISO()+'T00:00:00')-d)/864e5); }
+function addMonths(iso,n){ var d=new Date(iso+'T00:00:00'); var day=d.getDate(); d.setMonth(d.getMonth()+n); if(d.getDate()!==day) d.setDate(0); return d.toISOString().slice(0,10); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+function fmtMoney(v){ if(v==null||isNaN(v)) return '—'; v=Math.round(v); if(v>=1e6) return (v/1e6).toFixed(1).replace('.',',')+' млн ₽'; return v.toLocaleString('ru-RU')+' ₽'; }
+function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso+'T00:00:00'); return isNaN(d)?'—':d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+
+/* ---------- состояние ---------- */
+var S = { open:false, me:'', clients:[], byId:{}, tiles:[], ship:null, scope:'all', quest:null, focusId:null, focusAt:0, hover:null, sel:null,
+          cam:{x:0,y:0,k:1}, W:0, H:0, bounds:null, loaded:false, loading:false, fx:[], game:null, events:[], timer:null, raf:0, ready:false };
+var HEX = 13; // размер гекса в мире
+var CAT = {
+  empire:{name:'Империя',     col:'#2fae78', hi:'#7be3b0', ic:'🏰'},
+  colony:{name:'Колонии дивизиона', col:'#7b5cc9', hi:'#b9a3f2', ic:'🏯'},
+  front: {name:'Передовая',   col:'#d2622f', hi:'#ffb072', ic:'⚔️'},
+  fog:   {name:'Туманные земли', col:'#2b3550', hi:'#56628a', ic:''},
+  ruin:  {name:'Руины',       col:'#5a3b3b', hi:'#8a5f5f', ic:'☠️'}
+};
+var SEGCOL = {A:'#ffd24a',B:'#7fb7ff',C:'#9aa4bd',D:'#5d6680'};
+var LEVELS = [[0,'Стоянка'],[10,'Деревня'],[25,'Город'],[50,'Княжество'],[100,'Королевство'],[250,'Империя']];
+var SQUADCOL = ['#ffd24a','#ff7a59','#59d1ff','#b28cff','#6ee7a0','#ff9fd0'];
+
+function catOf(c){
+  var st=c.status;
+  if(st==='Активен (сделал заказ)'||st==='Конечный заказчик') return 'empire';
+  if(st==='Передан в дивизион') return 'colony';
+  if(st==='В работе'||st==='Не дозвонился') return 'front';
+  if(st==='Отказ') return 'ruin';
+  return 'fog';
+}
+
+/* ---------- шум и раскладка гексов ---------- */
+function hash(a,b){ var h=(a*374761393+b*668265263)^0x5bd1e995; h=(h^(h>>>13))*1274126177; return ((h^(h>>>16))>>>0)/4294967295; }
+function vnoise(x,y){ var xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi; var u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  var a=hash(xi,yi),b=hash(xi+1,yi),c=hash(xi,yi+1),d=hash(xi+1,yi+1); return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v; }
+function fbm(x,y){ return vnoise(x,y)*.6+vnoise(x*2.1,y*2.1)*.3+vnoise(x*4.3,y*4.3)*.1; }
+function hexXY(q,r){ return {x:HEX*Math.sqrt(3)*(q+r/2), y:HEX*1.5*r}; }
+function hash01(s){ var h=2166136261; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return ((h>>>0)%100000)/100000; }
+
+function layout(list){
+  var n=list.length, R=Math.ceil(Math.sqrt(n/2.6))+4, slots=[];
+  for(var q=-R;q<=R;q++) for(var r=-R;r<=R;r++){
+    var s=-q-r; var d=Math.max(Math.abs(q),Math.abs(r),Math.abs(s));
+    if(d>R) continue;
+    var p=hexXY(q,r); var nz=fbm(p.x/90+7,p.y/90+3);
+    slots.push({q:q,r:r,x:p.x,y:p.y,d:d+ (nz-.5)*R*.55});
+  }
+  slots.sort(function(a,b){return a.d-b.d;});
+  slots=slots.slice(0,n);
+  // порядок: империя в центре, дальше колонии, передовая, туман (по ценности), руины — вкраплениями
+  var order={empire:0,colony:1,front:2,fog:3};
+  var core=list.filter(function(t){return t.cat!=='ruin';});
+  core.sort(function(a,b){ return order[a.cat]-order[b.cat] || b.score-a.score; });
+  var ruins=list.filter(function(t){return t.cat==='ruin';});
+  var out=new Array(n), used={};
+  ruins.forEach(function(t){
+    var lo=Math.floor(n*.35), hi=n-1, idx=lo+Math.floor(hash01(t.id)*(hi-lo));
+    while(used[idx]) idx=idx>=hi?lo:idx+1;
+    used[idx]=1; out[idx]=t;
+  });
+  var ci=0; for(var i=0;i<n;i++){ if(!out[i]) out[i]=core[ci++]; }
+  var minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  out.forEach(function(t,i){ var s=slots[i]; t.q=s.q; t.r=s.r; t.x=s.x; t.y=s.y;
+    minX=Math.min(minX,s.x);maxX=Math.max(maxX,s.x);minY=Math.min(minY,s.y);maxY=Math.max(maxY,s.y); });
+  S.bounds={minX:minX-HEX*3,maxX:maxX+HEX*3,minY:minY-HEX*3,maxY:maxY+HEX*3};
+  return out;
+}
+
+/* ---------- игровая логика: опыт, серия, хроника ---------- */
+var DAILY_GOAL=3;
+var XPS={'Новый':0,'В работе':10,'Не дозвонился':3,'Активен (сделал заказ)':50,'Передан в дивизион':80,'Отказ':2,'Конечный заказчик':50};
+var RANKS=['Новобранец','Сержант','Лейтенант','Капитан','Майор','Полковник','Генерал','Маршал'];
+function localDay(v){ var d=(v instanceof Date)?v:new Date(v); if(isNaN(d)) return null; var m=d.getMonth()+1,dd=d.getDate(); return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd; }
+function computeGame(){
+  var act={}, xp=0, evs=[], me=S.me;
+  S.tiles.forEach(function(t){
+    var c=t.c, seen={};
+    (c.statusHistory||[]).forEach(function(h,i){
+      if(!h||!h.at) return; var day=localDay(h.at); if(!day) return;
+      if(!(i===0&&h.status==='Новый')) evs.push({at:h.at,day:day,by:h.by||'',status:h.status,id:t.id,company:c.company||'—'});
+      if(h.by===me&&!(i===0&&h.status==='Новый')){ act[day]=(act[day]||0)+1; xp+=XPS[h.status]||0; seen[day]=1; }
+    });
+    (c.notes||[]).forEach(function(n){ if(n&&n.by===me&&n.at){ var d=localDay(n.at); if(d){ act[d]=(act[d]||0)+1; xp+=3; seen[d]=1; } } });
+    if(c.lastContactDate&&(c.manager===me||c.accountManager===me)&&!seen[c.lastContactDate]){ act[c.lastContactDate]=(act[c.lastContactDate]||0)+1; xp+=5; }
+  });
+  var today=new Date(), streak=0, dots=[], broken=false, first=true, d=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  for(var i=0;i<800;i++,d.setDate(d.getDate()-1)){
+    var wd=d.getDay(); if(wd===0||wd===6) continue;
+    var k=localDay(d), ok=(act[k]||0)>=DAILY_GOAL;
+    if(dots.length<14) dots.push({k:k,ok:ok,n:act[k]||0,today:first});
+    if(!broken){ if(ok) streak++; else if(!first) broken=true; }
+    first=false;
+    if(broken&&dots.length>=14) break;
+  }
+  var lvl=Math.floor(Math.sqrt(xp/40))+1, cur=40*(lvl-1)*(lvl-1), nxt=40*lvl*lvl;
+  evs.sort(function(a,b){return a.at<b.at?1:-1;});
+  S.events=evs;
+  return {xp:xp,lvl:lvl,rank:RANKS[Math.min(RANKS.length-1,Math.floor((lvl-1)/2))],pct:Math.round((xp-cur)/(nxt-cur)*100),toNext:nxt-xp,streak:streak,dots:dots.reverse(),todayN:act[localDay(today)]||0};
+}
+function pushCapture(id,delay,label){ S.fx.push({id:id,t0:performance.now()+(delay||0),label:label,shown:false}); }
+
+/* ---------- загрузка данных ---------- */
+async function fetchAll(table, cols){
+  var from=0, size=1000, all=[];
+  while(true){
+    var res=await sb.from(table).select(cols).range(from,from+size-1);
+    if(res.error) throw res.error;
+    all=all.concat(res.data); if(res.data.length<size) break; from+=size;
+  }
+  return all;
+}
+async function loadData(){
+  if(S.loading) return; S.loading=true; setStatus('Разведчики собирают донесения…');
+  try{
+    var rows=await fetchAll('clients','id,data');
+    var cl=rows.map(function(r){ var c=r.data||{}; c._id=r.id; return c; });
+    var ship=null;
+    try{
+      var sh=await fetchAll('shipments','period_from,period_to,order_sum,order_count,client_code');
+      if(sh.length){
+        var latest=sh.reduce(function(a,s){return s.period_from>a?s.period_from:a;},'');
+        var per=sh.filter(function(s){return s.period_from===latest;});
+        ship={from:latest,to:per[0].period_to,sum:per.reduce(function(a,s){return a+(Number(s.order_sum)||0);},0),orders:per.reduce(function(a,s){return a+(Number(s.order_count)||0);},0),byCode:{}};
+        per.forEach(function(s){ ship.byCode[s.client_code]=(ship.byCode[s.client_code]||0)+(Number(s.order_sum)||0); });
+      }
+    }catch(e){ /* отгрузки не критичны */ }
+    S.ship=ship;
+    var prevCat=null; if(S.loaded){ prevCat={}; S.tiles.forEach(function(t){prevCat[t.id]=t.cat;}); }
+    S.clients=cl;
+    S.tiles=layout(cl.map(function(c){
+      var sc=score(c); return {id:c._id,c:c,score:sc,seg:seg(sc),cat:catOf(c),days:daysSince(c.lastContactDate),gold:ship&&c.code?(ship.byCode[c.code]||0):0};
+    }));
+    S.byId={}; S.tiles.forEach(function(t){ S.byId[t.id]=t; });
+    S.game=computeGame();
+    if(prevCat){ S.tiles.forEach(function(t){ if(prevCat[t.id]&&prevCat[t.id]!==t.cat&&(t.cat==='empire'||t.cat==='colony')) pushCapture(t.id,0,t.c.company); }); }
+    else { var cut=Date.now()-7*864e5, win=[], seenId={}; S.events.forEach(function(e){ if(seenId[e.id]) return; var tl=S.byId[e.id]; if((e.status==='Активен (сделал заказ)'||e.status==='Передан в дивизион')&&tl&&(tl.cat==='empire'||tl.cat==='colony')){ seenId[e.id]=1; win.push(e); } }); var rec=win.filter(function(e){return new Date(e.at).getTime()>=cut;}); (rec.length?rec:win).slice(0,4).forEach(function(e,n){ pushCapture(e.id,600+n*2600,e.company); }); }
+    S.grid={}; S.tiles.forEach(function(t){ S.grid[t.q+','+t.r]=t; });
+    S.loaded=true; S.ready=true; setStatus('');
+    renderHud(); fitCamera();
+  }catch(e){
+    console.error(e); setStatus('Не удалось получить донесения: '+(e&&e.message||'ошибка сети'));
+  }finally{ S.loading=false; }
+}
+function setStatus(t){ var el=document.getElementById('hqStatus'); if(el){ el.textContent=t; el.style.display=t?'block':'none'; } }
+
+/* ---------- производные величины ---------- */
+function inScope(t){ if(S.scope==='all') return true; return t.c.manager===S.me||t.c.accountManager===S.me; }
+function levelInfo(n){ var i=0; for(var k=0;k<LEVELS.length;k++) if(n>=LEVELS[k][0]) i=k; var next=LEVELS[i+1]; return {name:LEVELS[i][1], idx:i, next:next?next[1]:null, from:LEVELS[i][0], to:next?next[0]:null}; }
+function questList(){
+  var T=S.tiles.filter(inScope), q=[];
+  var scout=T.filter(function(t){return t.cat==='fog'&&!t.c.lastContactDate&&(t.seg==='A'||t.seg==='B');}).sort(function(a,b){return b.score-a.score;});
+  q.push({key:'scout',ic:'🗺️',title:'Разведка боем',sub:'Тёплые земли сегментов A/B ещё в тумане — первый контакт',xp:15,items:scout});
+  var hold=T.filter(function(t){return t.cat==='front'&&(t.days==null||t.days>=5);}).sort(function(a,b){return (b.days==null?999:b.days)-(a.days==null?999:a.days);});
+  q.push({key:'hold',ic:'🔥',title:'Удержать фронт',sub:'В работе, но тишина 5+ дней — гонец к ним',xp:20,items:hold});
+  var ready=T.filter(function(t){return t.cat==='empire'&&indStd(t.c.industry)&&t.c.status==='Активен (сделал заказ)';});
+  q.push({key:'ready',ic:'🚩',title:'Отправить в дивизион',sub:'Стандарт + сделал заказ — пора передавать',xp:30,items:ready});
+  var comm=T.filter(function(t){ if(t.cat!=='colony'||!t.c.transferDate) return false; var u=addMonths(t.c.transferDate,3), d=daysSince(u); return d!=null&&d<=0&&d>=-14; });
+  q.push({key:'comm',ic:'⏳',title:'Комиссия догорает',sub:'Окно в 3 месяца закрывается в ближайшие 14 дней',xp:10,items:comm});
+  return q;
+}
+
+/* ---------- DOM ---------- */
+var CSS = '@import url("https://fonts.googleapis.com/css2?family=Philosopher:wght@400;700&display=swap");'
++'#hqRoot{--g:#ffd24a;--gd:#b98a1c;--ink:#e9e4d3;--mut:#9aa4bd;--pan:rgba(14,20,36,.88);--line:rgba(255,210,74,.22);flex:1;display:flex;flex-direction:column;background:#0a1020;color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;min-height:calc(100vh - 110px)}'
++'#hqRoot[hidden]{display:none!important}'
++'#hqRoot *{box-sizing:border-box}'
++'#hqRoot .disp{font-family:"Philosopher","Manrope",serif;letter-spacing:.02em}'
++'#hqBar{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;padding:12px clamp(12px,2vw,24px);background:linear-gradient(#141c33,#0d1428);border-bottom:1px solid var(--line)}'
++'.hqRes{flex:1 1 140px;display:flex;align-items:center;gap:10px;padding:8px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);min-width:150px}'
++'.hqRes .ic{font-size:22px;filter:drop-shadow(0 0 6px rgba(255,210,74,.4))}'
++'.hqRes b{display:block;font-family:"Philosopher",serif;font-size:20px;line-height:1.1;color:#fff}'
++'.hqRes span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}'
++'.hqRank{flex:1 1 260px;min-width:240px}'
++'.hqRank .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}'
++'.hqRank .nm{font-family:"Philosopher",serif;font-size:20px;color:var(--g)}'
++'.hqBarBg{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:6px}'
++'.hqBarFg{height:100%;border-radius:99px;background:linear-gradient(90deg,#b98a1c,#ffd24a,#fff2b0);box-shadow:0 0 10px rgba(255,210,74,.6);transition:width .8s}'
++'#hqBody{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;min-height:560px}'
++'#hqMapWrap{position:relative;min-height:560px;overflow:hidden;background:#0a1226}'
++'#hqCanvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;touch-action:none}'
++'#hqCanvas.drag{cursor:grabbing}'
++'#hqStatus{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 20px;border-radius:10px;background:var(--pan);border:1px solid var(--line);font-family:"Philosopher",serif;font-size:18px;z-index:3}'
++'.hqFloat{position:absolute;z-index:2;background:var(--pan);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px)}'
++'#hqScope{left:12px;top:12px;display:flex;padding:4px;gap:4px}'
++'#hqScope button,#hqZoom button{appearance:none;border:0;background:transparent;color:var(--mut);font:600 12.5px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}'
++'#hqScope button.on{background:var(--g);color:#1b1405}'
++'#hqZoom{right:12px;top:12px;display:flex;flex-direction:column;padding:4px}'
++'#hqZoom button{font-size:18px;padding:4px 11px;color:var(--ink)}'
++'#hqLegend{left:12px;bottom:12px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:5px}'
++'#hqLegend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-2px}'
++'#hqTip{position:fixed;z-index:80;pointer-events:none;padding:9px 12px;border-radius:10px;background:rgba(10,14,26,.96);border:1px solid var(--line);font-size:12.5px;max-width:260px;opacity:0;transition:opacity .1s}'
++'#hqTip small{display:block;color:var(--mut)}#hqTip.show{opacity:1}#hqTip b{font-family:"Philosopher",serif;font-size:15px;color:var(--g);display:block;margin-bottom:3px}'
++'#hqSide{background:linear-gradient(#10172b,#0b1122);border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:calc(100vh - 170px)}'
++'#hqSide h3{font-family:"Philosopher",serif;font-size:17px;margin:0 0 8px;color:var(--g);display:flex;align-items:center;gap:8px}'
++'#hqSide h3:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}'
++'.hqQ{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.025);margin-bottom:8px;cursor:pointer;transition:.15s}'
++'.hqQ:hover,.hqQ.on{background:rgba(255,210,74,.08);border-color:rgba(255,210,74,.5)}'
++'.hqQ .t{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}'
++'.hqQ .n{margin-left:auto;font-family:"Philosopher",serif;font-size:18px;color:var(--g)}'
++'.hqQ .n.z{color:#6ee7a0}'
++'.hqQ .s{font-size:11.5px;color:var(--mut);margin-top:3px}'
++'.hqQ .xp{font-size:10.5px;color:#6ee7a0;margin-top:2px}'
++'.hqItems{margin-top:8px;display:flex;flex-direction:column;gap:3px}'
++'.hqItem{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 7px;border-radius:6px;background:rgba(255,255,255,.04);cursor:pointer}'
++'.hqItem:hover{background:rgba(255,210,74,.14)}'
++'.hqItem span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
++'.hqItem span:last-child{color:var(--mut);white-space:nowrap}'
++'.hqSq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.025);margin-bottom:8px}'
++'.hqSq .h{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}'
++'.hqSq .flag{width:10px;height:22px;border-radius:2px 6px 6px 2px;flex:none}'
++'.hqSq .role{font-size:11px;color:var(--mut);font-weight:400}'
++'.hqSq .row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-top:6px}'
++'.hqSq .row b{color:var(--ink)}'
++'.hqStack{display:flex;height:7px;border-radius:99px;overflow:hidden;margin-top:6px;background:rgba(255,255,255,.07)}'
++'#hqCard{position:absolute;right:12px;bottom:12px;width:min(300px,calc(100% - 24px));padding:12px 14px;z-index:2;display:none}'
++'#hqCard h4{font-family:"Philosopher",serif;font-size:17px;margin:0;color:var(--g)}'
++'#hqCard .m{font-size:12px;color:var(--mut);margin:4px 0 8px}'
++'#hqCard .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12.5px}'
++'#hqCard .kv span{color:var(--mut)}'
++'#hqCard .x{position:absolute;right:8px;top:6px;border:0;background:none;color:var(--mut);font-size:16px;cursor:pointer}'
++'#hqCard .bt{margin-top:10px;appearance:none;border:1px solid var(--gd);background:rgba(255,210,74,.12);color:var(--g);font:600 12.5px inherit;font-family:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}'
++'.hqCmd{flex:1 1 220px}.hqCmd b,.hqStreak b{font-size:18px}.hqStreak{flex:1 1 200px}'
++'.hqDots{display:flex;gap:3px;margin-top:5px}.hqDots i{width:9px;height:9px;border-radius:2px;background:rgba(255,255,255,.1)}.hqDots i.ok{background:#ff9a3c;box-shadow:0 0 6px rgba(255,154,60,.7)}.hqDots i.td{outline:1px dashed var(--g)}'
++'#hqBanner{position:absolute;left:50%;top:14px;transform:translate(-50%,-20px);z-index:4;padding:10px 20px;border-radius:12px;background:linear-gradient(#3a2d0a,#1d1604);border:1px solid var(--g);color:#ffe9a8;font-family:"Philosopher",serif;font-size:18px;opacity:0;transition:.4s;pointer-events:none;max-width:90%;text-align:center;box-shadow:0 0 30px rgba(255,210,74,.35)}#hqBanner.show{opacity:1;transform:translate(-50%,0)}'
++'@media (max-width:900px){#hqBody{grid-template-columns:1fr}#hqSide{max-height:none;border-left:0;border-top:1px solid var(--line)}#hqMapWrap{min-height:440px}}';
+
+function buildDom(){
+  var st=document.createElement('style'); st.textContent=CSS; document.head.appendChild(st);
+  var root=document.createElement('section'); root.id='hqRoot'; root.hidden=true;
+  root.innerHTML=
+   '<div id="hqBar"></div>'
+  +'<div id="hqBody">'
+  +  '<div id="hqMapWrap"><canvas id="hqCanvas"></canvas><div id="hqStatus">Разворачиваем карту…</div>'
+  +    '<div class="hqFloat" id="hqScope"><button data-s="all" class="on" data-tip="<b>Вся империя</b>Карта, квесты и ресурсы по всем клиентам отдела.">🌍 Вся империя</button><button data-s="mine" data-tip="<b>Мои земли</b>Только клиенты, где вы менеджер или менеджер ведения. Остальные гексы затемняются.">🚩 Мои земли</button></div>'
+  +    '<div class="hqFloat" id="hqZoom"><button data-z="in" data-tip="Приблизить карту">＋</button><button data-z="out" data-tip="Отдалить карту">－</button><button data-z="fit" data-tip="Показать всю карту" style="font-size:14px">⌂</button><button data-z="ref" data-tip="Обновить данные из CRM" style="font-size:14px">⟳</button></div>'
+  +    '<div class="hqFloat" id="hqLegend" data-tip="<b>Легенда</b>Цвет гекса показывает состояние клиента. Золотая искра в тумане — клиент сегмента A, самый ценный для первого контакта."></div><div id="hqBanner"></div>'
+  +    '<div class="hqFloat" id="hqCard"></div>'
+  +  '</div>'
+  +  '<aside id="hqSide"><div><h3 data-tip="<b>Квесты на сегодня</b>Список задач, собранный из данных CRM. Когда задач не осталось, на карточке появляется галочка.">📜 Квесты на сегодня</h3><div id="hqQuests"></div></div><div><h3 data-tip="<b>Хроника</b>Последние смены статусов: кто взял землю, передал в дивизион, вступил в бой или потерял клиента. Нажмите на запись, чтобы перейти к клиенту на карте.">📰 Хроника</h3><div id="hqFeed"></div></div><div><h3 data-tip="<b>Отряды</b>Команда: сколько клиентов у каждого менеджера, сколько взято, сколько на фронте и какая конверсия.">🛡️ Отряды</h3><div id="hqSquads"></div></div></aside>'
+  +'</div><div id="hqTip"></div>';
+  var app=document.getElementById('app')||document.body; app.appendChild(root);
+  var tip=root.querySelector('#hqTip'); document.body.appendChild(tip);
+
+  root.querySelector('#hqScope').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; S.scope=b.getAttribute('data-s');
+    root.querySelectorAll('#hqScope button').forEach(function(x){x.classList.toggle('on',x===b);}); S.quest=null; renderHud(); };
+  root.querySelector('#hqZoom').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; var z=b.getAttribute('data-z');
+    if(z==='in') zoomAt(S.W/2,S.H/2,1.35); else if(z==='out') zoomAt(S.W/2,S.H/2,1/1.35); else if(z==='fit') fitCamera(); else if(z==='ref'){ S.loading=false; loadData(); } };
+  var tipEl=document.getElementById('hqTip');
+  root.addEventListener('mousemove',function(e){
+    var t=e.target.closest&&e.target.closest('[data-tip]'); if(!t||t.id==='hqCanvas'){ if(e.target.id!=='hqCanvas') tipEl.classList.remove('show'); return; }
+    tipEl.innerHTML=t.getAttribute('data-tip'); var w=tipEl.offsetWidth||260, x=e.clientX+14; if(x+w>window.innerWidth-8) x=e.clientX-w-14;
+    tipEl.style.left=Math.max(8,x)+'px'; tipEl.style.top=(e.clientY+16)+'px'; tipEl.classList.add('show');
+  });
+  root.addEventListener('mouseleave',function(){ tipEl.classList.remove('show'); });
+  wireCanvas();
+  if(window.ResizeObserver) new ResizeObserver(resize).observe(root.querySelector('#hqMapWrap'));
+  window.addEventListener('resize',resize);
+}
+
+/* ---------- HUD ---------- */
+function gameTiles(){
+  var g=S.game; if(!g) return '';
+  var dots=g.dots.map(function(d){ return '<i class="'+(d.ok?'ok':(d.today?'td':''))+'" title="'+d.k+': '+d.n+' действ."></i>'; }).join('');
+  return '<div class="hqRes hqCmd" data-tip="<b>Командир</b>Ваш личный уровень. Опыт даётся за действия: смена статуса (в работу +10, заказ +50, передача в дивизион +80), заметка +3, контакт +5. Считается по истории CRM."><div class="ic">🎖️</div><div style="flex:1"><span>Командир · ур. '+g.lvl+'</span><b>'+g.rank+'</b><div class="hqBarBg"><div class="hqBarFg" style="width:'+g.pct+'%"></div></div><span style="text-transform:none;letter-spacing:0">'+g.xp+' оп. · до след. ур. '+g.toNext+'</span></div></div>'
+   +'<div class="hqRes hqStreak" data-tip="<b>Серия</b>Сколько рабочих дней подряд вы делали минимум '+DAILY_GOAL+' действия (статус, заметка, контакт). Оранжевые квадраты — выполненные дни, пунктир — сегодня. Выходные серию не рвут."><div class="ic">🔥</div><div><b>'+g.streak+' '+(g.streak%10===1&&g.streak%100!==11?'день':(g.streak%10>=2&&g.streak%10<=4&&(g.streak%100<10||g.streak%100>=20)?'дня':'дней'))+'</b><span>Серия · сегодня '+Math.min(g.todayN,99)+' / '+DAILY_GOAL+'</span><div class="hqDots">'+dots+'</div></div></div>';
+}
+function renderHud(){
+  if(!S.loaded) return;
+  var T=S.tiles.filter(inScope), tot=T.length;
+  var by={empire:0,colony:0,front:0,fog:0,ruin:0}; T.forEach(function(t){by[t.cat]++;});
+  var conquered=by.empire+by.colony, fogPct=tot?Math.round(by.fog/tot*100):0;
+  var lv=levelInfo(conquered), prog=lv.to?Math.min(100,Math.round((conquered-lv.from)/(lv.to-lv.from)*100)):100;
+  var conv=tot?Math.round(conquered/tot*100):0;
+  var goldTxt=S.ship?fmtMoney(S.ship.sum):'—', goldSub=S.ship?('Казна: '+fmtDate(S.ship.from).slice(0,5)+'–'+fmtDate(S.ship.to).slice(0,5)):'Казна';
+  var bar=document.getElementById('hqBar');
+  bar.innerHTML=
+    gameTiles()+'<div class="hqRes hqRank" data-tip="<b>Ранг владений</b>Зависит от числа взятых территорий: клиенты со статусом «Активен» и «Передан в дивизион». Стоянка → Деревня → Город → Княжество → Королевство → Империя."><div style="flex:1"><div class="top"><span>Ранг владений</span><span>'+conquered+(lv.to?' / '+lv.to:'')+'</span></div><div class="nm">👑 '+lv.name+'</div><div class="hqBarBg"><div class="hqBarFg" style="width:'+prog+'%"></div></div>'+(lv.next?'<div style="font-size:11px;color:var(--mut);margin-top:4px">До «'+lv.next+'»: '+(lv.to-conquered)+' терр.</div>':'<div style="font-size:11px;color:var(--mut);margin-top:4px">Высший ранг достигнут</div>')+'</div></div>'
+   +res('💰',goldTxt,goldSub,'<b>Казна</b>Сумма отгрузок всех клиентов за последний загруженный период (вкладка «Отгрузки»). Прочерк — отгрузки ещё не загружены.')+res('🏰',conquered+' <small style="font-size:13px;color:var(--mut)">из '+tot+'</small>','Территорий взято','<b>Территории</b>Сколько клиентов уже купили: статус «Активен» или «Передан в дивизион». Число справа — все клиенты в выбранном режиме.')
+   +res('⚔️',by.front,'Войск на фронте','<b>Передовая</b>Клиенты в работе: статусы «В работе» и «Не дозвонился». Это те, с кем идёт активная борьба за первый заказ.')+res('🌫️',fogPct+'%','Земли в тумане','<b>Туман войны</b>Доля клиентов со статусом «Новый», с которыми ещё не начинали работу. Чем меньше тумана, тем лучше разведана база.')+res('📈',conv+'%','Конверсия в заказ','<b>Конверсия</b>Взятые территории, делённые на всех клиентов. Показывает, какая доля базы дошла до заказа.');
+  function res(ic,v,l,tip){ return '<div class="hqRes" data-tip="'+tip+'"><div class="ic">'+ic+'</div><div><b>'+v+'</b><span>'+l+'</span></div></div>'; }
+
+  var lg=document.getElementById('hqLegend');
+  lg.innerHTML=['empire','colony','front','fog','ruin'].map(function(k){ return '<div><i style="background:'+CAT[k].col+'"></i>'+CAT[k].name+' — <b>'+by[k]+'</b></div>'; }).join('')
+    +'<div style="color:var(--mut)"><i style="background:#ffd24a;border-radius:50%"></i>золотая искра = сегмент A в тумане</div>';
+
+  // квесты
+  var Q=questList(), qEl=document.getElementById('hqQuests');
+  qEl.innerHTML=Q.map(function(q){
+    var on=S.quest===q.key, n=q.items.length;
+    return '<div class="hqQ'+(on?' on':'')+'" data-q="'+q.key+'" data-tip="<b>'+q.title+'</b>'+q.sub+'. Нажмите, чтобы подсветить клиентов на карте и открыть список. За каждого +'+q.xp+' опыта."><div class="t"><span>'+q.ic+'</span><span>'+q.title+'</span><span class="n'+(n?'':' z')+'">'+(n?n:'✓')+'</span></div><div class="s">'+q.sub+'</div><div class="xp">'+(n?'+'+q.xp+' опыта за каждый':'Квест выполнен — отдыхайте, полководец')+'</div>'
+     +(on&&n?'<div class="hqItems">'+q.items.slice(0,6).map(function(t){return '<div class="hqItem" data-id="'+esc(t.id)+'"><span>'+esc(t.c.company||'—')+'</span><span>'+(t.days!=null?t.days+' дн.':t.seg)+'</span></div>';}).join('')+(n>6?'<div style="font-size:11px;color:var(--mut);padding:3px 7px">…и ещё '+(n-6)+'</div>':'')+'</div>':'')+'</div>';
+  }).join('');
+  qEl.onclick=function(e){
+    var it=e.target.closest('.hqItem'); if(it){ flyTo(it.getAttribute('data-id'),true); return; }
+    var q=e.target.closest('.hqQ'); if(!q) return; var k=q.getAttribute('data-q'); S.quest=(S.quest===k)?null:k; renderHud();
+    if(S.quest){ var qq=questList().filter(function(x){return x.key===k;})[0]; if(qq&&qq.items[0]) flyTo(qq.items[0].id,false); }
+  };
+
+  // отряды
+  var sq={}, ac={};
+  S.tiles.forEach(function(t){
+    var m=t.c.manager||'Без командира'; (sq[m]=sq[m]||{n:0,empire:0,colony:0,front:0,fog:0,ruin:0}); sq[m].n++; sq[m][t.cat]++;
+    if(t.c.accountManager){ var a=t.c.accountManager; (ac[a]=ac[a]||{n:0,empire:0,colony:0}); ac[a].n++; if(t.cat==='empire') ac[a].empire++; if(t.cat==='colony') ac[a].colony++; }
+  });
+  var names=Object.keys(sq).sort(function(a,b){return sq[b].n-sq[a].n;});
+  var html=names.map(function(m,i){
+    var s=sq[m], cv=s.empire+s.colony, role=(m===S.me)?'Командующий (вы)':'Отряд разведки';
+    var seg=function(k,c){ return '<div style="width:'+(s.n?s[k]/s.n*100:0)+'%;background:'+c+'"></div>'; };
+    return '<div class="hqSq" data-tip="<b>Отряд менеджера</b>Клиенты, которых привёл менеджер. Полоса: зелёный — взято, фиолетовый — в дивизионе, оранжевый — фронт, тёмный — туман. Конв. — доля взятых.."><div class="h"><div class="flag" style="background:'+SQUADCOL[i%SQUADCOL.length]+'"></div><div>'+esc(m)+'<div class="role">'+role+'</div></div></div>'
+      +'<div class="hqStack">'+seg('empire',CAT.empire.col)+seg('colony',CAT.colony.col)+seg('front',CAT.front.col)+seg('ruin',CAT.ruin.col)+seg('fog','#3a4566')+'</div>'
+      +'<div class="row"><span>Земель: <b>'+s.n+'</b></span><span>Взято: <b>'+cv+'</b></span><span>Фронт: <b>'+s.front+'</b></span><span>Конв.: <b>'+(s.n?Math.round(cv/s.n*100):0)+'%</b></span></div></div>';
+  }).join('');
+  html+=Object.keys(ac).sort(function(a,b){return ac[b].n-ac[a].n;}).map(function(a){
+    var s=ac[a]; return '<div class="hqSq" data-tip="<b>Гарнизон</b>Клиенты, которых ведёт менеджер ведения: сколько под опекой, сколько активных и передано в дивизион."><div class="h"><div class="flag" style="background:#6ee7a0"></div><div>'+esc(a)+'<div class="role">Гарнизон — ведение клиентов</div></div></div><div class="row"><span>Под опекой: <b>'+s.n+'</b></span><span>Активных: <b>'+s.empire+'</b></span><span>В дивизионе: <b>'+s.colony+'</b></span></div></div>';
+  }).join('');
+  var FE={'Активен (сделал заказ)':['🏰','взял землю'],'Передан в дивизион':['🚩','передан в дивизион'],'В работе':['⚔️','вступил в бой'],'Отказ':['☠️','потерян'],'Не дозвонился':['📵','не дозвонился'],'Конечный заказчик':['🏰','конечный заказчик']};
+  var feed=S.events.filter(function(e){return FE[e.status]&&(S.scope==='all'||e.by===S.me);}).slice(0,10);
+  document.getElementById('hqFeed').innerHTML=feed.length?feed.map(function(e){ var f=FE[e.status], dd=e.day.slice(8)+'.'+e.day.slice(5,7); return '<div class="hqItem" data-id="'+esc(e.id)+'"><span>'+f[0]+' '+esc(e.company)+'</span><span>'+dd+'</span></div>'; }).join(''):'<div style="color:var(--mut);font-size:12px">Пока тихо</div>';
+  document.getElementById('hqFeed').onclick=function(e){ var it=e.target.closest('.hqItem'); if(it) flyTo(it.getAttribute('data-id'),true); };
+  document.getElementById('hqSquads').innerHTML=html||'<div style="color:var(--mut);font-size:12px">Нет данных</div>';
+}
+
+/* ---------- камера и ввод ---------- */
+function resize(){
+  var cv=document.getElementById('hqCanvas'); if(!cv||!S.open) return; var w=cv.parentNode.clientWidth,h=cv.parentNode.clientHeight; if(!w||!h) return;
+  var dpr=Math.min(window.devicePixelRatio||1,2); cv.width=w*dpr; cv.height=h*dpr; S.W=w; S.H=h; S.dpr=dpr;
+  if(S.ready && !S.fitted) fitCamera();
+}
+function fitCamera(){
+  if(!S.bounds||!S.W) return; var b=S.bounds, k=Math.min(S.W/(b.maxX-b.minX),S.H/(b.maxY-b.minY))*.96;
+  S.cam.k=k; S.cam.x=S.W/2-(b.minX+b.maxX)/2*k; S.cam.y=S.H/2-(b.minY+b.maxY)/2*k; S.fitted=true; S.minK=k*.8;
+}
+function zoomAt(px,py,f){ var c=S.cam, nk=Math.max(S.minK||.2,Math.min(8,c.k*f)); f=nk/c.k; c.x=px-(px-c.x)*f; c.y=py-(py-c.y)*f; c.k=nk; }
+function toWorld(px,py){ return {x:(px-S.cam.x)/S.cam.k,y:(py-S.cam.y)/S.cam.k}; }
+function pick(px,py){
+  var w=toWorld(px,py), fr=w.y/(HEX*1.5), fq=w.x/(HEX*Math.sqrt(3))-fr/2;
+  var x=fq,z=fr,y=-x-z, rx=Math.round(x),ry=Math.round(y),rz=Math.round(z);
+  var dx=Math.abs(rx-x),dy=Math.abs(ry-y),dz=Math.abs(rz-z);
+  if(dx>dy&&dx>dz) rx=-ry-rz; else if(dy>dz) ry=-rx-rz; else rz=-rx-ry;
+  return S.grid&&S.grid[rx+','+rz]||null;
+}
+var fly=null;
+function flyTo(id,select){
+  var t=S.byId[id]; if(!t) return; S.focusId=id; S.focusAt=performance.now();
+  var k=Math.max(S.cam.k,Math.min(3.2,S.minK*5)); fly={t0:performance.now(),dur:700,from:{x:S.cam.x,y:S.cam.y,k:S.cam.k},to:{k:k,x:S.W/2-t.x*k,y:S.H/2-t.y*k}};
+  if(select) showCard(t);
+}
+function wireCanvas(){
+  var cv=document.getElementById('hqCanvas'), tip=document.getElementById('hqTip'), drag=null, moved=0;
+  cv.addEventListener('pointerdown',function(e){ cv.setPointerCapture(e.pointerId); drag={x:e.clientX,y:e.clientY,cx:S.cam.x,cy:S.cam.y}; moved=0; cv.classList.add('drag'); fly=null; });
+  cv.addEventListener('pointermove',function(e){
+    var r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+    if(drag){ var dx=e.clientX-drag.x, dy=e.clientY-drag.y; moved=Math.max(moved,Math.abs(dx)+Math.abs(dy)); S.cam.x=drag.cx+dx; S.cam.y=drag.cy+dy; }
+    var t=pick(px,py); S.hover=t;
+    if(t&&!drag){ var c=t.c; tip.innerHTML='<b>'+esc(c.company||'—')+'</b>'+CAT[t.cat].name+' · сегмент '+t.seg+' ('+t.score+')<br>'+esc(c.industry||'отрасль не указана')+'<br>'+(t.days!=null?'Контакт: '+t.days+' дн. назад':'Контакта не было')+(c.manager?'<br>Командир: '+esc(c.manager):'');
+      tip.style.left=Math.min(window.innerWidth-280,e.clientX+14)+'px'; tip.style.top=(e.clientY+14)+'px'; tip.classList.add('show'); } else tip.classList.remove('show');
+  });
+  cv.addEventListener('pointerup',function(e){ cv.classList.remove('drag'); if(drag&&moved<5){ var r=cv.getBoundingClientRect(); var t=pick(e.clientX-r.left,e.clientY-r.top); if(t) showCard(t); else hideCard(); } drag=null; });
+  cv.addEventListener('pointerleave',function(){ tip.classList.remove('show'); S.hover=null; });
+  cv.addEventListener('wheel',function(e){ e.preventDefault(); var r=cv.getBoundingClientRect(); zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.15:1/1.15); },{passive:false});
+}
+function showCard(t){
+  S.sel=t.id; var c=t.c, el=document.getElementById('hqCard'); el.style.display='block';
+  var rows=[['Статус',c.status||'—'],['Этап',c.stage||'—'],['Отрасль',c.industry||'—'],['Командир',c.manager||'—'],['Посл. контакт',t.days!=null?fmtDate(c.lastContactDate)+' ('+t.days+' дн.)':'не было']];
+  if(t.gold) rows.push(['Отгрузки',fmtMoney(t.gold)]);
+  el.innerHTML='<button class="x" id="hqCardX">✕</button><h4>'+esc(c.company||'—')+'</h4><div class="m">'+CAT[t.cat].ic+' '+CAT[t.cat].name+' · сегмент <b style="color:'+SEGCOL[t.seg]+'">'+t.seg+'</b> · '+t.score+' оч.</div><div class="kv">'+rows.map(function(r){return '<span>'+r[0]+'</span><div>'+esc(r[1])+'</div>';}).join('')+'</div><button class="bt" id="hqCopy">⧉ Скопировать название</button>';
+  document.getElementById('hqCardX').onclick=hideCard;
+  document.getElementById('hqCopy').onclick=function(){ try{ navigator.clipboard.writeText(c.company||''); this.textContent='✓ Скопировано'; }catch(e){} };
+}
+function hideCard(){ S.sel=null; document.getElementById('hqCard').style.display='none'; }
+
+/* ---------- отрисовка ---------- */
+function hexPath(ctx,x,y,s){ ctx.beginPath(); for(var i=0;i<6;i++){ var a=Math.PI/180*(60*i-30); var px=x+s*Math.cos(a),py=y+s*Math.sin(a); i?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.closePath(); }
+var CLOUDS=null;
+function makeClouds(){ CLOUDS=[]; var b=S.bounds; for(var i=0;i<46;i++){ CLOUDS.push({x:b.minX+hash01('cx'+i)*(b.maxX-b.minX),y:b.minY+hash01('cy'+i)*(b.maxY-b.minY),r:HEX*(5+hash01('cr'+i)*9),sp:.3+hash01('cs'+i)*.6,ph:hash01('cp'+i)*6.28}); } }
+var STARS=null;
+function frame(now){
+  S.raf=requestAnimationFrame(frame); if(!S.open||document.hidden) return;
+  var cv=document.getElementById('hqCanvas'); if(!cv||!S.W) return; var ctx=cv.getContext('2d'), dpr=S.dpr||1, W=S.W, H=S.H;
+  if(fly){ var p=Math.min(1,(now-fly.t0)/fly.dur), e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2; S.cam.k=fly.from.k+(fly.to.k-fly.from.k)*e; S.cam.x=fly.from.x+(fly.to.x-fly.from.x)*e; S.cam.y=fly.from.y+(fly.to.y-fly.from.y)*e; if(p>=1) fly=null; }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // океан
+  var g=ctx.createRadialGradient(W/2,H/2,H*.1,W/2,H/2,Math.max(W,H)*.75); g.addColorStop(0,'#16294d'); g.addColorStop(1,'#070c1a'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  if(!STARS){ STARS=[]; for(var i=0;i<90;i++) STARS.push([Math.random(),Math.random(),Math.random()*6.28]); }
+  ctx.fillStyle='rgba(180,210,255,.35)'; STARS.forEach(function(s){ var a=.2+.25*Math.sin(now/900+s[2]); ctx.globalAlpha=a; ctx.fillRect(s[0]*W,s[1]*H,1.4,1.4); }); ctx.globalAlpha=1;
+  if(!S.ready){ return; }
+  if(!CLOUDS) makeClouds();
+  var c=S.cam; ctx.setTransform(dpr*c.k,0,0,dpr*c.k,dpr*c.x,dpr*c.y);
+  var vx0=-c.x/c.k-HEX*2, vy0=-c.y/c.k-HEX*2, vx1=(W-c.x)/c.k+HEX*2, vy1=(H-c.y)/c.k+HEX*2;
+  var T=S.tiles, zoomIn=c.k>1.1, size=HEX*.97;
+  // 1) туман и земли вне квестов
+  var qset=null; if(S.quest){ var qq=questList().filter(function(x){return x.key===S.quest;})[0]; if(qq){ qset={}; qq.items.forEach(function(t){qset[t.id]=1;}); } }
+  // береговая тень
+  for(var pass=0;pass<2;pass++){
+    for(var i=0;i<T.length;i++){
+      var t=T[i]; if(t.x<vx0||t.x>vx1||t.y<vy0||t.y>vy1) continue;
+      var isFog=t.cat==='fog'; if((pass===0)!==isFog) continue;
+      var col=CAT[t.cat].col, dim=!inScope(t)?.28:1;
+      ctx.globalAlpha=dim;
+      if(isFog){ var k2={A:'#62749f',B:'#52628f',C:'#44527c',D:'#384464'}[t.seg]; col=k2; }
+      else if(t.cat==='front'){ var fl=.85+.15*Math.sin(now/260+t.q*1.7+t.r); col=shade(col,fl); }
+      else if(t.cat==='empire'&&t.c.status==='Конечный заказчик') col='#4a8fd4';
+      hexPath(ctx,t.x,t.y,size); ctx.fillStyle=col; ctx.fill();
+      if(!isFog){ var gr=ctx.createLinearGradient(t.x,t.y-size,t.x,t.y+size); gr.addColorStop(0,'rgba(255,255,255,.28)'); gr.addColorStop(.5,'rgba(255,255,255,0)'); gr.addColorStop(1,'rgba(0,0,0,.3)'); hexPath(ctx,t.x,t.y,size); ctx.fillStyle=gr; ctx.fill(); }
+      ctx.lineWidth=isFog?.6:1; ctx.strokeStyle=isFog?'rgba(150,170,220,.4)':CAT[t.cat].hi; hexPath(ctx,t.x,t.y,size); ctx.stroke();
+    }
+    if(pass===0){
+      // облака тумана поверх туманных земель
+      CLOUDS.forEach(function(cl){
+        var ox=Math.sin(now/6000*cl.sp+cl.ph)*HEX*4, oy=Math.cos(now/7000*cl.sp+cl.ph)*HEX*2, x=cl.x+ox, y=cl.y+oy;
+        if(x<vx0-cl.r||x>vx1+cl.r||y<vy0-cl.r||y>vy1+cl.r) return;
+        var gg=ctx.createRadialGradient(x,y,0,x,y,cl.r); gg.addColorStop(0,'rgba(170,185,225,.11)'); gg.addColorStop(1,'rgba(170,185,225,0)'); ctx.globalAlpha=1; ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(x,y,cl.r,0,6.283); ctx.fill();
+      });
+    }
+  }
+  ctx.globalAlpha=1;
+  // 2) искры золота (A в тумане), значки, квесты, выбор
+  for(var j=0;j<T.length;j++){
+    var u=T[j]; if(u.x<vx0||u.x>vx1||u.y<vy0||u.y>vy1) continue;
+    var al=inScope(u)?1:.28; ctx.globalAlpha=al;
+    if(u.cat==='fog'&&u.seg==='A'){ var tw=.5+.5*Math.sin(now/500+u.q*2.3+u.r*1.1); ctx.fillStyle='rgba(255,210,74,'+(.35+.55*tw)+')'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*(.16+.12*tw),0,6.283); ctx.fill(); ctx.fillStyle='rgba(255,210,74,'+(.12*tw)+')'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*.6,0,6.283); ctx.fill(); }
+    else if(u.cat==='fog'&&u.seg==='B'&&zoomIn){ ctx.fillStyle='rgba(127,183,255,.55)'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*.12,0,6.283); ctx.fill(); }
+    var capital=(j===0&&u.cat==='empire');
+    if(capital||(u.cat!=='fog'&&c.k>1.5)||(u.cat==='ruin'&&c.k>1.1)){
+      var ic=capital?'🏰':CAT[u.cat].ic; ctx.font=(capital?HEX*1.9:HEX*1.05)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ic,u.x,u.y+(capital?-HEX*.1:HEX*.05));
+    }
+    if(qset&&qset[u.id]){ var ph=(now/700+u.q*.1)%1; ctx.strokeStyle='rgba(255,230,120,'+(1-ph)+')'; ctx.lineWidth=2/c.k*1.4; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*(.7+ph*1.5),0,6.283); ctx.stroke(); ctx.fillStyle='#ffd24a'; ctx.beginPath(); ctx.arc(u.x,u.y,HEX*.3,0,6.283); ctx.fill(); }
+  }
+  ctx.globalAlpha=1;
+  S.fx=S.fx.filter(function(f){ return now<f.t0+3200; });
+  S.fx.forEach(function(f){
+    if(now<f.t0) return; var t=S.byId[f.id]; if(!t) return;
+    if(!f.shown){ f.shown=true; showBanner('🏰 Взята территория: '+(f.label||'—')); }
+    var p=(now-f.t0)/3200, e=1-p;
+    hexPath(ctx,t.x,t.y,HEX*.97); ctx.fillStyle='rgba(255,245,190,'+Math.max(0,.75*(1-p*2.2))+')'; ctx.fill();
+    for(var r=0;r<3;r++){ var q=p-r*.12; if(q<0||q>1) continue; ctx.strokeStyle='rgba(255,210,74,'+(1-q)+')'; ctx.lineWidth=(3.5-r)/c.k*1.3; ctx.beginPath(); ctx.arc(t.x,t.y,HEX*(.9+q*6),0,6.283); ctx.stroke(); }
+    for(var k=0;k<12;k++){ var a=k/12*6.283+t.q, dist=HEX*(.6+p*4.2)*(.7+((k*37)%10)/16); ctx.fillStyle='rgba(255,'+(200+k*4)+',90,'+Math.max(0,e)+')'; ctx.beginPath(); ctx.arc(t.x+Math.cos(a)*dist,t.y+Math.sin(a)*dist-p*HEX,HEX*.14*(1+e),0,6.283); ctx.fill(); }
+    ctx.globalAlpha=Math.min(1,e*2.2); ctx.font=HEX*(1.4+p)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🚩',t.x,t.y-HEX*(.4+p*2.4)); ctx.globalAlpha=1;
+  });
+  // 3) наведение/выбор/фокус
+  [[S.hover,'rgba(255,255,255,.9)',1.6],[S.sel&&S.byId[S.sel],'#ffd24a',2.4]].forEach(function(p){ var t=p[0]; if(!t) return; ctx.strokeStyle=p[1]; ctx.lineWidth=p[2]/c.k*1.2; hexPath(ctx,t.x,t.y,HEX*1.02); ctx.stroke(); });
+  if(S.focusId&&S.byId[S.focusId]&&now-S.focusAt<4000){ var f=S.byId[S.focusId], pp=((now-S.focusAt)/600)%1; ctx.strokeStyle='rgba(255,230,120,'+(1-pp)+')'; ctx.lineWidth=3/c.k*1.2; ctx.beginPath(); ctx.arc(f.x,f.y,HEX*(1+pp*3),0,6.283); ctx.stroke(); }
+  // 4) подписи зон
+  ctx.setTransform(dpr,0,0,dpr,0,0); drawLabels(ctx);
+  // виньетка
+  var vg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.45,W/2,H/2,Math.max(W,H)*.78); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.5)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+}
+var bannerT=null;
+function showBanner(txt){ var b=document.getElementById('hqBanner'); if(!b) return; b.textContent=txt; b.classList.add('show'); clearTimeout(bannerT); bannerT=setTimeout(function(){ b.classList.remove('show'); },2600); }
+function shade(hex,f){ var n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255; return 'rgb('+Math.min(255,Math.round(r*f+(f>.9?20:0)))+','+Math.round(g*f)+','+Math.round(b*f)+')'; }
+var ZONE=null;
+function drawLabels(ctx){
+  if(!ZONE){ ZONE={}; ['empire','colony','front','fog'].forEach(function(k){ var a=S.tiles.filter(function(t){return t.cat===k;}); if(!a.length) return; var x=0,y=0; a.forEach(function(t){x+=t.x;y+=t.y;}); ZONE[k]={x:x/a.length,y:y/a.length}; }); ZONE.fog&&(ZONE.fog.y=S.bounds.maxY-HEX*5); ZONE.fog&&(ZONE.fog.x=(S.bounds.minX+S.bounds.maxX)/2); }
+  var names={empire:'Земли Империи',colony:'Колонии',front:'Передовая',fog:'Туманные земли'};
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  Object.keys(ZONE).forEach(function(k){ var z=ZONE[k], px=z.x*S.cam.k+S.cam.x, py=z.y*S.cam.k+S.cam.y; if(px<-50||px>S.W+50||py<-30||py>S.H+30||S.cam.k>(S.minK||1)*2.4) return;
+    var fs=Math.max(11,Math.min(26,HEX*S.cam.k*1.6)); ctx.font='700 '+fs+'px Philosopher,serif'; ctx.lineWidth=4; ctx.strokeStyle='rgba(5,8,18,.85)'; ctx.fillStyle=k==='fog'?'rgba(200,212,245,.8)':'#ffe9a8'; var txt=names[k].toUpperCase().split('').join(' ');
+    if(k==='colony'||k==='front'){ return; }
+    ctx.strokeText(txt,px,py); ctx.fillText(txt,px,py); });
+}
+
+/* ---------- жизненный цикл / навигация ---------- */
+function openHq(){
+  var root=document.getElementById('hqRoot'), main=document.getElementById('main'); if(!root) return;
+  S.open=true; root.hidden=false; if(main) main.style.display='none';
+  markNav(); setTimeout(function(){ resize(); },0);
+  if(!S.loaded) loadData(); else renderHud();
+  clearInterval(S.timer); S.timer=setInterval(function(){ if(S.open) loadData(); },90000);
+  if(!S.raf) S.raf=requestAnimationFrame(frame);
+}
+function closeHq(){
+  var root=document.getElementById('hqRoot'), main=document.getElementById('main'); S.open=false; if(root) root.hidden=true; if(main) main.style.display=''; clearInterval(S.timer);
+  document.getElementById('hqTip')&&document.getElementById('hqTip').classList.remove('show');
+}
+function markNav(){
+  var nav=document.getElementById('navrow'); if(!nav) return; var mine=nav.querySelector('[data-hq]');
+  if(!mine){ mine=document.createElement('button'); mine.className='navbtn'; mine.setAttribute('data-hq','1'); mine.textContent='⚔️ Штаб'; mine.style.marginLeft='auto'; nav.appendChild(mine); }
+  nav.querySelectorAll('.navbtn').forEach(function(b){ if(b!==mine) { if(S.open) b.classList.remove('active'); } });
+  mine.classList.toggle('active',S.open);
+}
+function startNav(){
+  var nav=document.getElementById('navrow');
+  nav.addEventListener('click',function(e){
+    var b=e.target.closest('.navbtn'); if(!b) return;
+    if(b.hasAttribute('data-hq')){ e.stopPropagation(); S.open?null:openHq(); return; }
+    if(S.open) closeHq();
+  },true);
+  new MutationObserver(function(){ if(!S.allowed) return; markNav(); }).observe(nav,{childList:true});
+  markNav();
+}
+
+async function init(){
+  async function check(){
+    var r=await sb.auth.getSession(); var s=r&&r.data&&r.data.session; if(!s||!s.user||s.user.email!==OWNER_EMAIL) return;
+    if(S.allowed) return; S.allowed=true;
+    try{ var m=await sb.from('managers').select('display_name').eq('email',s.user.email).maybeSingle(); S.me=(m&&m.data&&m.data.display_name)||'Фёдоров Роман'; }catch(e){ S.me='Фёдоров Роман'; }
+    buildDom(); startNav();
+  }
+  await check();
+  sb.auth.onAuthStateChange(function(){ check(); });
+}
+window.__hqDebug=S;
+init();
+})();
+
+</script>
 </body></html>
