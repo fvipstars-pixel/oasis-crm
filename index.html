@@ -2670,7 +2670,7 @@ async function downloadKpiExcel(){
   sheet1Rows.push(footRow);
 
   // Лист 2 — список клиентов за выбранный на дашборде период (по дате регистрации)
-  const clientHeader = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Источник","Отрасль","Дивизион","Этап","Статус","Регион","Скоринг","Сегмент","Дата регистрации","Дата последнего контакта","Дата передачи","Комиссия менеджеру до","Комиссия активна"];
+  const clientHeader = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Источник","Отрасль","Дивизион","Этап","Статус","Регион","Статус контрагента (справочно)","Скоринг","Сегмент","Дата регистрации","Дата последнего контакта","Дата передачи","Комиссия менеджеру до","Комиссия активна"];
   const sheet2Rows = [ clientHeader.map(h=>({val:h, style:1})) ];
   kd.source
     .slice()
@@ -2690,6 +2690,7 @@ async function downloadKpiExcel(){
         {val:c.stage||""},
         {val:c.status||""},
         {val:c.region||""},
+        {val:c.counterpartyStatusRef||""},
         {val:s.total!=null?s.total:"", type:s.total!=null?"Number":"String"},
         {val:s.segment?s.segment.code:""},
         {val:fmtDate(c.registrationDate)},
@@ -2703,7 +2704,7 @@ async function downloadKpiExcel(){
   // Лист 3 — «Передача в дивизион» (готовы к передаче, как во вкладке)
   const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
   ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
-  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
+  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Статус контрагента (справочно)","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
   ready.forEach(([,c])=>{
     const h = c.handover||{};
     const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
@@ -2713,6 +2714,7 @@ async function downloadKpiExcel(){
       {val:c.manager||""},
       {val:c.industry||""},
       {val:c.region||""},
+        {val:c.counterpartyStatusRef||""},
       {val:fmtDate(c.registrationDate)},
       {val:c.contactPerson||""},
       {val:c.phone||""},
@@ -2733,7 +2735,7 @@ async function downloadKpiExcel(){
     if (!b.ci.transferDate) return 1;
     return a.ci.until.localeCompare(b.ci.until);
   });
-  const sheet4Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Дата передачи","Статус комиссии"].map(h=>({val:h, style:1})) ];
+  const sheet4Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Статус контрагента (справочно)","Дата передачи","Статус комиссии"].map(h=>({val:h, style:1})) ];
   withInfo.forEach(({c,ci})=>{
     let statusText;
     if (!ci.transferDate) statusText = "дата не указана";
@@ -2744,6 +2746,7 @@ async function downloadKpiExcel(){
       {val:c.manager||""},
       {val:c.industry||""},
       {val:c.region||""},
+        {val:c.counterpartyStatusRef||""},
       {val:fmtDate(ci.transferDate)},
       {val:statusText},
     ]);
@@ -2792,7 +2795,7 @@ async function downloadKpiExcel(){
 async function downloadListExcel(rowsClients){
   const btn = document.getElementById("btnExportList");
 
-  const header = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Контактное лицо","Телефон","Email","Доп. контакты","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
+  const header = ["Код","Компания","Менеджер","Менеджер ведения","Раздел","Отрасль","Этап","Статус","Сегмент","Баллы","Выручка 2025, ₽","Регион","Статус контрагента (справочно)","Контактное лицо","Телефон","Email","Доп. контакты","Дата регистрации","Посл. контакт","Дней без контакта","Следующий шаг / комментарий"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -2810,6 +2813,7 @@ async function downloadListExcel(rowsClients){
       {val:s.total, type:"Number"},
       {val: c.revenue2025!=null && c.revenue2025!=="" ? Number(c.revenue2025) : "", type: c.revenue2025!=null && c.revenue2025!=="" ? "Number" : "String"},
       {val:c.region||""},
+        {val:c.counterpartyStatusRef||""},
       {val:c.contactPerson||""},
       {val:c.phone||""},
       {val:c.email||""},
@@ -2857,7 +2861,7 @@ async function downloadListExcel(rowsClients){
 async function downloadTransferExcel(rowsClients){
   const btn = document.getElementById("btnExportTransfer");
 
-  const header = ["Код","Компания","Менеджер","Менеджер ведения","Отрасль","Дивизион","Регион","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Сумма отгрузки, ₽","Кол-во отгрузок","Статус","Следующий шаг / комментарий","Посл. контакт","Важные договорённости","Потенциальные следующие заказы","Открытые вопросы","Подготовка к передаче"];
+  const header = ["Код","Компания","Менеджер","Менеджер ведения","Отрасль","Дивизион","Регион","Статус контрагента (справочно)","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Сумма отгрузки, ₽","Кол-во отгрузок","Статус","Следующий шаг / комментарий","Посл. контакт","Важные договорённости","Потенциальные следующие заказы","Открытые вопросы","Подготовка к передаче"];
   const rows = [ header.map(h=>({val:h, style:1})) ];
   rowsClients.forEach(c=>{
     const s = computeScores(c);
@@ -2872,6 +2876,7 @@ async function downloadTransferExcel(rowsClients){
       {val:c.industry||""},
       {val:s.division||""},
       {val:c.region||""},
+        {val:c.counterpartyStatusRef||""},
       {val:fmtDate(c.registrationDate)},
       {val:c.contactPerson||""},
       {val:c.phone||""},
