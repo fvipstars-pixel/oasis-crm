@@ -684,7 +684,7 @@ function computeScores(c){
   else if (total>=20) segment = {code:"C", label:"Низкий приоритет", style:"warn", desc:"Автоматизированный прогрев (рассылка/чат-бот), без личных звонков"};
   else segment = {code:"D", label:"Заморозка", style:"neutral", desc:"Не тратить время сейчас, вернуться через квартал/полгода"};
   const division = industry.division;
-  const readyForTransfer = division==="Стандарт" && c.status==="Активен (сделал заказ)";
+  const readyForTransfer = division==="Стандарт" && c.status==="Активен (сделал заказ)" && transferOrdersOk(c);
   return {icp, volume, eng, historyPts, historyLabel, total, segment, division, readyForTransfer};
 }
 function isConverted(c){ return c.status==="Активен (сделал заказ)" || c.status==="Передан в дивизион"; }
@@ -1093,6 +1093,66 @@ function clientShipmentTotal(c){
   return {sum, count};
 }
 
+// ===== Правило передачи с октября 2026 =====
+// Стандарт передаётся в другой дивизион, когда у клиента 2 и более заказа за месяц
+// или в сумме за 2 месяца (последний загруженный месяц отгрузок + предыдущий).
+// Заказы берём из вкладки «Отгрузки» (shipments.order_count) по коду клиента 1С.
+const TRANSFER_RULE_FROM = "2026-10-01";
+const TRANSFER_MIN_ORDERS = 2;
+let _twFor = null, _twMap = null, _twMonths = [];
+function transferWindowOrders(){
+  if (_twFor===shipments && _twMap) return _twMap;
+  const byMonth = new Map(); // "YYYY-MM" -> период с самой поздней датой окончания (промежуточные выгрузки не задваивают)
+  shipments.forEach(s=>{
+    if (!s.period_from || String(s.period_from) < TRANSFER_RULE_FROM) return;
+    const m = String(s.period_from).slice(0,7), to = String(s.period_to);
+    const cur = byMonth.get(m);
+    if (!cur || to > cur.to) byMonth.set(m, {to, key: s.period_from+"|"+s.period_to});
+  });
+  _twMonths = Array.from(byMonth.keys()).sort().reverse().slice(0,2).sort();
+  const keys = new Set(_twMonths.map(m=>byMonth.get(m).key));
+  const map = new Map();
+  shipments.forEach(s=>{
+    if (keys.has(s.period_from+"|"+s.period_to)) map.set(s.client_code, (map.get(s.client_code)||0) + (Number(s.order_count)||0));
+  });
+  _twFor = shipments; _twMap = map;
+  return map;
+}
+function clientOrdersWindow(c){
+  if (!c || !c.code || !shipmentsLoaded) return 0;
+  return transferWindowOrders().get(c.code) || 0;
+}
+function transferOrdersOk(c){ return shipmentsLoaded && clientOrdersWindow(c) >= TRANSFER_MIN_ORDERS; }
+function transferWindowLabel(){
+  if (!shipmentsLoaded) return "";
+  transferWindowOrders();
+  const MN = ["янв.","февр.","март","апр.","май","июнь","июль","авг.","сент.","окт.","нояб.","дек."];
+  return _twMonths.map(m=>MN[Number(m.slice(5,7))-1]+" "+m.slice(0,4)).join(" + ");
+}
+function transferNotReadyLabel(c){
+  if (computeScores(c).division==="Стандарт" && c.status==="Активен (сделал заказ)"){
+    return "Нужно "+TRANSFER_MIN_ORDERS+"+ заказа за 2 мес. (сейчас "+clientOrdersWindow(c)+")";
+  }
+  return "Пока не готов к передаче";
+}
+function waitingTransferHtml(){
+  if (!shipmentsLoaded) return `<div class="banner warn" style="margin-top:10px;"><span>Отгрузки ещё загружаются — список на передачу и счётчик заказов появятся через несколько секунд.</span></div>`;
+  const rows = Array.from(clients.entries())
+    .filter(([,c])=> c.status==="Активен (сделал заказ)" && computeScores(c).division==="Стандарт" && clientOrdersWindow(c)===1)
+    .filter(([,c])=> transferManagerFilter==="all" || c.manager===transferManagerFilter)
+    .sort((a,b)=> (a[1].manager||"").localeCompare(b[1].manager||"","ru") || (a[1].company||"").localeCompare(b[1].company||"","ru"));
+  const body = rows.length===0 ? `<div class="empty">Сейчас нет клиентов Стандарта с одним заказом.</div>` : `<div class="tablewrap"><div class="tscroll"><table>
+    <thead><tr><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Дата регистрации</th><th>Заказов за 2 мес.</th><th>Сумма отгрузки</th><th>Что дальше</th></tr></thead>
+    <tbody>${rows.map(([id,c])=>{
+      const ship = clientShipmentTotal(c);
+      return `<tr data-id="${esc(id)}"><td><div class="company">${esc(c.company)}</div><div class="code">${esc(c.code||"")}</div></td>
+        <td class="muted">${esc(c.manager||"—")}</td><td class="muted">${esc(c.industry||"—")}</td><td class="muted">${fmtDate(c.registrationDate)}</td>
+        <td class="mono">1</td><td class="mono">${ship.sum ? fmtMoney(ship.sum) : "—"}</td><td class="muted">остаётся у менеджера, ждём ещё 1 заказ</td></tr>`;
+    }).join("")}</tbody></table></div></div>`;
+  return `<h3 style="margin:22px 0 6px;">Ждут второго заказа (${rows.length})</h3>
+    <div class="helptext">Клиенты Стандарта с 1 заказом за ${esc(transferWindowLabel())}: остаются у менеджера. Как только заказов станет 2 и больше (в одном месяце или в сумме за 2 месяца), клиент появится в списке выше.</div>${body}`;
+}
+
 async function initDb(){
   db = makeSupabaseDb();
   unsub = db.collection("clients").onSnapshot(snap=>{
@@ -1122,7 +1182,7 @@ async function loadShipments(){
     }
     shipments = all;
     shipmentsLoaded = true;
-    if (view==="shipments") renderMain();
+    if (clients.size) renderShell(); else if (view==="shipments") renderMain();
   }catch(e){
     console.error("shipments load error", e);
     logEvent("shipments-error", "Не удалось загрузить отгрузки: "+(e&&e.message||"unknown"));
@@ -1455,7 +1515,7 @@ function renderTransfer(){
 
   const intro = `<div class="banner good" style="align-items:flex-start;">
     <div>
-      <b>Готовы к передаче в Дивизион 2:</b> отрасль = «Стандарт» и статус = «Активен (сделал заказ)».
+      <b>Готовы к передаче в Дивизион 2:</b> отрасль = «Стандарт», статус = «Активен (сделал заказ)» и 2 и более заказа — в одном месяце или в сумме за 2 месяца (по вкладке «Отгрузки»: ${esc(transferWindowLabel()||"отгрузки загружаются")}).
       Раз в месяц соберите этот список и распределите клиентов между менеджерами по развитию —
       предварительно заполнив контактное лицо, договорённости и открытые вопросы в карточке клиента.
       Можно перевести сразу несколько: отметьте нужных галочками и нажмите «Перевести выбранных» —
@@ -1509,6 +1569,7 @@ function renderTransfer(){
         <td class="muted">${esc(c.phone||"—")}</td>
         <td class="muted">${esc(c.email||"—")}</td>
         <td class="mono">${ship.sum ? fmtMoney(ship.sum) : "—"}</td>
+        <td class="mono">${clientOrdersWindow(c)}</td>
         <td class="muted">${esc(c.nextStep||"—")}</td>
         <td class="muted">${noContactBadge(c.lastContactDate)}</td>
         <td>${filled?'<span class="pill good">заполнено</span>':'<span class="pill warn">нужно заполнить</span>'}</td>
@@ -1516,13 +1577,13 @@ function renderTransfer(){
     }).join("");
     return `<div class="tablewrap"><div class="tscroll">
       <table>
-        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th class="sortable${transferSortCol==="shipSum"?" sorted":""}" data-sort="shipSum">Сумма отгрузки${transferSortCol==="shipSum"?(transferSortDir==="asc"?" ▲":" ▼"):""}</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
+        <thead><tr><th></th><th>Компания</th><th>Менеджер</th><th>Отрасль</th><th>Регион</th><th>Дата регистрации</th><th>Контактное лицо</th><th>Телефон</th><th>Email</th><th class="sortable${transferSortCol==="shipSum"?" sorted":""}" data-sort="shipSum">Сумма отгрузки${transferSortCol==="shipSum"?(transferSortDir==="asc"?" ▲":" ▼"):""}</th><th>Заказов за 2 мес.</th><th>Следующий шаг / комментарий</th><th>Посл. контакт</th><th>Подготовка к передаче</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div></div>`;
   })();
 
-  main.innerHTML = intro + toolbarHtml + statsHtml + bulkBarHtml + readyBlock;
+  main.innerHTML = intro + toolbarHtml + statsHtml + bulkBarHtml + readyBlock + waitingTransferHtml();
 
   main.querySelectorAll("tbody tr").forEach(tr=> tr.onclick = (e)=>{
     if (e.target.closest(".chkTransfer")) return;
@@ -2704,7 +2765,7 @@ async function downloadKpiExcel(){
   // Лист 3 — «Передача в дивизион» (готовы к передаче, как во вкладке)
   const ready = Array.from(clients.entries()).filter(([,c])=>computeScores(c).readyForTransfer);
   ready.sort((a,b)=> (a[1].lastContactDate||"").localeCompare(b[1].lastContactDate||""));
-  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Статус контрагента (справочно)","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче"].map(h=>({val:h, style:1})) ];
+  const sheet3Rows = [ ["Код","Компания","Менеджер","Отрасль","Регион","Статус контрагента (справочно)","Дата регистрации","Контактное лицо","Телефон","Email","Доп. контакты","Следующий шаг / комментарий","Посл. контакт","Подготовка к передаче","Заказов за 2 мес."].map(h=>({val:h, style:1})) ];
   ready.forEach(([,c])=>{
     const h = c.handover||{};
     const filled = Boolean(c.contactPerson && c.phone && c.email && h.agreements && h.nextOrders);
@@ -2723,6 +2784,7 @@ async function downloadKpiExcel(){
       {val:c.nextStep||""},
       {val:fmtDate(c.lastContactDate)},
       {val: filled ? "заполнено" : "нужно заполнить"},
+      {val: clientOrdersWindow(c)},
     ]);
   });
 
@@ -3133,9 +3195,9 @@ function renderDrawerBody(){
       <div id="commissionBanner">${commissionBannerHtml(draft)}</div>
       <div class="readonlybadges" style="margin-top:10px;">
         <span class="pill ${s.division==="Стандарт"?"info":"violet"}">Дивизион: ${esc(s.division)}</span>
-        <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":"Пока не готов к передаче"}</span>
+        <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":esc(transferNotReadyLabel(draft))}</span>
       </div>
-      <div class="helptext">Дивизион считается автоматически по отрасли. «Готов к передаче» появляется, когда отрасль = Стандарт и статус = Активен (сделал заказ).</div>
+      <div class="helptext">Дивизион считается автоматически по отрасли. «Готов к передаче» появляется, когда отрасль = Стандарт, статус = Активен (сделал заказ) и у клиента 2 и более заказа за месяц или в сумме за 2 месяца (по отгрузкам).</div>
     </div>
 
     <div>
@@ -3279,7 +3341,7 @@ function onDraftChanged(){
   const badges = document.querySelector(".readonlybadges");
   if (badges) badges.innerHTML = `
     <span class="pill ${s.division==="Стандарт"?"info":"violet"}">Дивизион: ${esc(s.division)}</span>
-    <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":"Пока не готов к передаче"}</span>`;
+    <span class="pill ${s.readyForTransfer?"good":"neutral"}">${s.readyForTransfer?"Готов к передаче":esc(transferNotReadyLabel(draft))}</span>`;
   const commBanner = document.getElementById("commissionBanner");
   if (commBanner) commBanner.innerHTML = commissionBannerHtml(draft);
 }
