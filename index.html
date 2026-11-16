@@ -1135,6 +1135,11 @@ function transferNotReadyLabel(c){
   }
   return "Пока не готов к передаче";
 }
+function secondOrderBadge(c){
+  if (!shipmentsLoaded || c.status!=="Активен (сделал заказ)" || computeScores(c).division!=="Стандарт") return "";
+  if (clientOrdersWindow(c)!==1) return "";
+  return ' <span class="pill warn" title="Стандарт передаётся после 2 и более заказов за месяц или за 2 месяца. Сейчас 1 заказ.">нужен ещё 1 заказ</span>';
+}
 function waitingTransferHtml(){
   if (!shipmentsLoaded) return `<div class="banner warn" style="margin-top:10px;"><span>Отгрузки ещё загружаются — список на передачу и счётчик заказов появятся через несколько секунд.</span></div>`;
   const rows = Array.from(clients.entries())
@@ -1394,7 +1399,7 @@ function renderList(){
       <td class="muted">${esc(c.region||"—")}</td>
       <td class="muted">${esc(tabLabel(c))}</td>
       <td class="muted">${esc(c.stage||"—")}</td>
-      <td class="col-status"><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span></td>
+      <td class="col-status"><span class="pill ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status||"—")}</span>${secondOrderBadge(c)}</td>
       <td>${s.segment?`<span class="pill ${s.segment.style}">${s.segment.code}</span>`:'<span class="muted">—</span>'}</td>
       <td class="mono">${s.total}</td>
       <td class="mono col-revenue">${fmtMoney(c.revenue2025)}</td>
